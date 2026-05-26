@@ -17,7 +17,7 @@ export interface OrchestratorDeps {
   budget: Budget;
 }
 
-export type RunStatus = "done" | "budget" | "stopped";
+export type RunStatus = "done" | "budget" | "stopped" | "drained";
 
 export interface RunResult {
   status: RunStatus;
@@ -72,6 +72,8 @@ export class Orchestrator {
 
     await Promise.all(tasks);
     off();
-    return terminal ?? { status: this.stopped ? "stopped" : "done", summary: "all agents completed" };
+    // All agents finished their work without a lead `done`, budget, or stop.
+    // This is distinct from `done` — the lead never declared the goal met.
+    return terminal ?? { status: "drained", summary: "all agents completed" };
   }
 }

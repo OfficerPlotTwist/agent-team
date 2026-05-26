@@ -43,4 +43,13 @@ describe("Orchestrator", () => {
     expect(seen).toContain("coder#1:message");
     expect(seen).toContain("lead#0:done");
   });
+
+  it("terminates with status 'drained' when agents finish without a lead 'done'", async () => {
+    const bus = new MessageBus();
+    const orch = new Orchestrator({ bus, budget: { maxTurns: 100 } });
+    const result = await orch.run("g", [
+      { role: "coder", adapter: new FakeAdapter([{ kind: "message", to: "all", text: "did some work" }]) },
+    ]);
+    expect(result.status).toBe("drained");
+  });
 });
