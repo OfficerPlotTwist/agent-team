@@ -1,6 +1,6 @@
 import type { AgentAdapter } from "./adapter.js";
 import type { Role } from "./events.js";
-import { makeAgentId } from "./events.js";
+import { makeAgentId, roleOf } from "./events.js";
 import { MessageBus } from "./bus.js";
 
 export interface SpecialistSpec {
@@ -56,7 +56,7 @@ export class Orchestrator {
         recordTerminal({ status: "stopped", summary: "stopped by user" }, true);
       } else if (this.turns >= this.deps.budget.maxTurns) {
         recordTerminal({ status: "budget", summary: `turn budget ${this.deps.budget.maxTurns} reached` }, true);
-      } else if (e.kind === "done" && e.from === makeAgentId("lead", 0)) {
+      } else if (e.kind === "done" && roleOf(e.from) === "lead") {
         recordTerminal({ status: "done", summary: e.summary }, false);
       }
     });
