@@ -27,4 +27,9 @@ describe("normalizePath", () => {
     expect(normalizePath("src\\a.ts")).toBe(canonical);
     expect(normalizePath("./src/a.ts")).toBe(canonical);
   });
+
+  it("throws when .. escapes the repo root", () => {
+    expect(() => normalizePath("../a.ts")).toThrow(/escapes repo root/);
+    expect(() => normalizePath("src/../..")).toThrow(/escapes repo root/);
+  });
 });
