@@ -1,15 +1,10 @@
 import type { Role } from "./events.js";
-import { normalizePath } from "./paths.js";
 
 export interface TaskNode {
   id: string;
   role: Role;
   goal: string;
   dependsOn: string[];
-  /** Repo-relative file paths this node owns; default []. Normalized at
-   *  construction (backslashes → forward slashes, "./" stripped). Throws if a
-   *  path escapes the repo root via "..". */
-  writes?: string[];
 }
 
 export class TaskGraph {
@@ -20,7 +15,7 @@ export class TaskGraph {
   constructor(nodes: TaskNode[]) {
     for (const node of nodes) {
       if (this.nodes.has(node.id)) throw new Error(`Duplicate task id: ${node.id}`);
-      this.nodes.set(node.id, { ...node, writes: (node.writes ?? []).map(normalizePath) });
+      this.nodes.set(node.id, node);
     }
     for (const node of this.nodes.values()) {
       for (const dep of node.dependsOn) {
