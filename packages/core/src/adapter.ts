@@ -4,6 +4,10 @@ export interface TaskContext {
   goal: string;
   role: Role;
   agentId: AgentId;
+  /** Worktree path the agent should work in (S2). Undefined for non-worktree runs. */
+  cwd?: string;
+  /** The agent's branch (S2). Undefined for non-worktree runs. */
+  branch?: string;
 }
 
 export type Emit = (event: AgentEvent) => void;

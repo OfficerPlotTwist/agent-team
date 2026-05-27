@@ -29,3 +29,15 @@ describe("FakeAdapter", () => {
     expect(out.length).toBe(1);
   });
 });
+
+describe("FakeAdapter context recording", () => {
+  it("records the cwd and branch it was started with", async () => {
+    const fake = new FakeAdapter([{ kind: "done", summary: "ok" }]);
+    await fake.startTask(
+      { goal: "g", role: "coder", agentId: "coder#a", cwd: "/repo/.worktrees/coder-a", branch: "agentteam/coder-a" },
+      () => {},
+    );
+    expect(fake.lastContext?.cwd).toBe("/repo/.worktrees/coder-a");
+    expect(fake.lastContext?.branch).toBe("agentteam/coder-a");
+  });
+});
