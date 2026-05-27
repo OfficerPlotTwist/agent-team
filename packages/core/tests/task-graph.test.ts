@@ -72,3 +72,17 @@ describe("TaskGraph scheduling", () => {
     expect(() => g.complete("x")).toThrow(/unknown/i);
   });
 });
+
+describe("TaskGraph write-ownership", () => {
+  it("normalizes a node's declared writes at construction", () => {
+    const g = new TaskGraph([
+      { id: "a", role: "coder", goal: "do a", dependsOn: [], writes: ["src\\a.ts", "./src/b.ts"] },
+    ]);
+    expect(g.ready()[0].writes).toEqual(["src/a.ts", "src/b.ts"]);
+  });
+
+  it("defaults writes to [] when omitted", () => {
+    const g = new TaskGraph([{ id: "a", role: "coder", goal: "do a", dependsOn: [] }]);
+    expect(g.ready()[0].writes).toEqual([]);
+  });
+});
