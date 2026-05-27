@@ -44,4 +44,48 @@ export class TaskGraph {
       if (color.get(id) === WHITE) visit(id);
     }
   }
+
+  ready(): TaskNode[] {
+    const out: TaskNode[] = [];
+    for (const node of this.nodes.values()) {
+      if (this.started.has(node.id) || this.completed.has(node.id)) continue;
+      if (node.dependsOn.every((dep) => this.completed.has(dep))) out.push(node);
+    }
+    return out;
+  }
+
+  start(id: string): void {
+    if (!this.nodes.has(id)) throw new Error(`Unknown task: ${id}`);
+    this.started.add(id);
+  }
+
+  complete(id: string): void {
+    if (!this.nodes.has(id)) throw new Error(`Unknown task: ${id}`);
+    this.completed.add(id);
+  }
+
+  isDone(): boolean {
+    return this.completed.size === this.nodes.size;
+  }
+
+  ids(): string[] {
+    return [...this.nodes.keys()];
+  }
+
+  completedIds(): string[] {
+    return [...this.completed];
+  }
+
+  topologicalOrder(): TaskNode[] {
+    const order: TaskNode[] = [];
+    const visited = new Set<string>();
+    const visit = (id: string): void => {
+      if (visited.has(id)) return;
+      visited.add(id);
+      for (const dep of this.nodes.get(id)!.dependsOn) visit(dep);
+      order.push(this.nodes.get(id)!);
+    };
+    for (const id of this.nodes.keys()) visit(id);
+    return order;
+  }
 }
