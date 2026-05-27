@@ -52,4 +52,19 @@ export class WorktreeManager {
       .filter((line) => line.startsWith("worktree "))
       .map((line) => line.slice("worktree ".length).trim());
   }
+
+  /**
+   * Merge `branch` into the branch already checked out in `intoWorktree`.
+   * Runs in the integration worktree — never the user's checked-out tree.
+   */
+  async merge(branch: string, intoWorktree: string): Promise<MergeResult> {
+    const res = await this.git.run(["merge", "--no-edit", branch], intoWorktree);
+    if (res.code === 0) return { ok: true };
+    const diff = await this.git.run(
+      ["diff", "--name-only", "--diff-filter=U"],
+      intoWorktree,
+    );
+    const conflicts = diff.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+    return { ok: false, conflicts };
+  }
 }
