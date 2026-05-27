@@ -6,7 +6,9 @@ export interface TaskNode {
   role: Role;
   goal: string;
   dependsOn: string[];
-  /** Repo-relative file paths this node owns; default []. Normalized at construction. */
+  /** Repo-relative file paths this node owns; default []. Normalized at
+   *  construction (backslashes → forward slashes, "./" stripped). Throws if a
+   *  path escapes the repo root via "..". */
   writes?: string[];
 }
 

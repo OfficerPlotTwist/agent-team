@@ -85,4 +85,10 @@ describe("TaskGraph write-ownership", () => {
     const g = new TaskGraph([{ id: "a", role: "coder", goal: "do a", dependsOn: [] }]);
     expect(g.ready()[0].writes).toEqual([]);
   });
+
+  it("throws when a writes path escapes the repo root", () => {
+    expect(
+      () => new TaskGraph([{ id: "a", role: "coder", goal: "do a", dependsOn: [], writes: ["../../etc/passwd"] }]),
+    ).toThrow(/escapes repo root/i);
+  });
 });
