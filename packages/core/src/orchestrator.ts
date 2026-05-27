@@ -2,6 +2,9 @@ import type { AgentAdapter } from "./adapter.js";
 import type { Role } from "./events.js";
 import { makeAgentId, roleOf } from "./events.js";
 import { MessageBus } from "./bus.js";
+import type { TaskGraph, TaskNode } from "./task-graph.js";
+import type { WorktreeManager } from "./worktree.js";
+import type { IntegrationCoordinator } from "./integration.js";
 
 export interface SpecialistSpec {
   role: Role;
@@ -75,5 +78,115 @@ export class Orchestrator {
     // All agents finished their work without a lead `done`, budget, or stop.
     // This is distinct from `done` — the lead never declared the goal met.
     return terminal ?? { status: "drained", summary: "all agents completed" };
+  }
+}
+
+export interface SchedulerDeps {
+  bus: MessageBus;
+  budget: Budget;
+  graph: TaskGraph;
+  worktrees: WorktreeManager;
+  integration: IntegrationCoordinator;
+  /** Ref the integration branch + first worktrees are cut from (workspace HEAD). */
+  baseRef: string;
+}
+
+export type ScheduleStatus = "complete" | "budget" | "stopped" | "blocked";
+
+export interface ScheduleResult {
+  status: ScheduleStatus;
+  completed: string[];
+  blocked: string[];
+}
+
+/**
+ * Executes a TaskGraph: creates a worktree per ready node, runs ready nodes
+ * concurrently, merges each branch into integration on `done`, unlocks dependents.
+ * Terminates on graph-complete, budget exhaustion, stop(), or a blocked graph
+ * (no in-flight work and nothing ready — e.g. a node failed or hit a conflict).
+ */
+export class Scheduler {
+  private stopped = false;
+  private turns = 0;
+
+  constructor(private deps: SchedulerDeps) {}
+
+  stop(): void {
+    this.stopped = true;
+  }
+
+  async run(adapterFor: (node: TaskNode) => AgentAdapter): Promise<ScheduleResult> {
+    const { bus, budget, graph, worktrees, integration, baseRef } = this.deps;
+    this.stopped = false;
+    this.turns = 0;
+    await integration.init(baseRef);
+
+    const off = bus.subscribe(() => { this.turns += 1; });
+    const inflight = new Map<string, Promise<void>>();
+    const adapters = new Map<string, AgentAdapter>();
+    const failed = new Set<string>();
+
+    // A "tick" promise that resolves whenever any node settles, so the loop wakes.
+    let resolveTick!: () => void;
+    let tick = new Promise<void>((r) => { resolveTick = r; });
+    const wake = (): void => {
+      const r = resolveTick;
+      tick = new Promise<void>((res) => { resolveTick = res; });
+      r();
+    };
+
+    const runNode = async (node: TaskNode): Promise<void> => {
+      try {
+        const wt = await worktrees.create(node, integration.tip());
+        const agentId = `${node.role}#${node.id}`;
+        const adapter = adapterFor(node);
+        adapters.set(node.id, adapter);
+        await adapter.startTask(
+          { goal: node.goal, role: node.role, agentId, cwd: wt.path, branch: wt.branch },
+          (event) => bus.publish(event),
+        );
+        const outcome = await integration.integrate(agentId, wt.branch);
+        if (outcome.status === "merged") graph.complete(node.id);
+        else failed.add(node.id);
+        await worktrees.remove(node);
+      } catch (err) {
+        failed.add(node.id);
+        bus.publish({ kind: "error", from: `${node.role}#${node.id}`, message: String(err) });
+      } finally {
+        inflight.delete(node.id);
+        adapters.delete(node.id);
+        wake();
+      }
+    };
+
+    while (!graph.isDone()) {
+      if (this.stopped || this.turns >= budget.maxTurns) break;
+      for (const node of graph.ready()) {
+        if (inflight.has(node.id) || failed.has(node.id)) continue;
+        graph.start(node.id);
+        inflight.set(node.id, runNode(node));
+      }
+      if (inflight.size === 0) break; // graph not done and nothing in flight => blocked
+      await tick;
+    }
+
+    if (this.stopped || this.turns >= budget.maxTurns) {
+      for (const a of adapters.values()) a.interrupt();
+    }
+    off();
+    await Promise.allSettled([...inflight.values()]);
+    await worktrees.pruneAll();
+
+    const completed = graph.completedIds();
+    const completedSet = new Set(completed);
+    const blocked = graph.ids().filter((id) => !completedSet.has(id));
+    const status: ScheduleStatus = graph.isDone()
+      ? "complete"
+      : this.stopped
+        ? "stopped"
+        : this.turns >= budget.maxTurns
+          ? "budget"
+          : "blocked";
+    return { status, completed, blocked };
   }
 }
