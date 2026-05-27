@@ -49,6 +49,28 @@ describe("WorktreeManager merge (real git)", () => {
     if (!result.ok) expect(result.conflicts).toContain("shared.txt");
   });
 
+  it("aborts a conflicted merge so the worktree stays usable for the next merge", async () => {
+    const { dir, git } = await makeTempRepo();
+    const wm = new WorktreeManager(git, dir, noop);
+    const a = await wm.create(coder("a"), "main");
+    const b = await wm.create(coder("b"), "main");
+    const c = await wm.create(coder("c"), "main");
+    await commitFile(git, a.path, "shared.txt", "alpha\n");
+    await commitFile(git, b.path, "shared.txt", "beta\n");      // conflicts with a
+    await commitFile(git, c.path, "other.txt", "gamma\n");      // touches a different file
+
+    const intg = await wm.create(coder("intg"), "main");
+    expect(await wm.merge(a.branch, intg.path)).toEqual({ ok: true });
+    expect((await wm.merge(b.branch, intg.path)).ok).toBe(false); // conflict + abort
+
+    // If the conflicted merge was aborted, the worktree is clean and the next
+    // unrelated merge succeeds (no lingering MERGE_HEAD, no empty-conflict cascade).
+    const status = await git.run(["status", "--porcelain"], intg.path);
+    expect((status as { stdout: string }).stdout.trim()).toBe("");
+    expect(await wm.merge(c.branch, intg.path)).toEqual({ ok: true });
+    expect((await readFile(join(intg.path, "other.txt"), "utf8"))).toBe("gamma\n");
+  });
+
   it("hydrated context files are written, untracked, and not carried by a merge", async () => {
     const { dir, git } = await makeTempRepo();
     const fixture: ContextProvider = {

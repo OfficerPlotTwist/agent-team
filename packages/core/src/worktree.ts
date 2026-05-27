@@ -65,6 +65,11 @@ export class WorktreeManager {
       intoWorktree,
     );
     const conflicts = diff.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+    // Abort the failed merge so the integration worktree returns to a clean state.
+    // Without this it stays mid-merge (MERGE_HEAD set), and the next merge fails
+    // with exit 128 and reports zero conflicts — silently cascading. Capture the
+    // conflicted paths first (above), since --abort clears the unmerged index.
+    await this.git.run(["merge", "--abort"], intoWorktree);
     return { ok: false, conflicts };
   }
 }

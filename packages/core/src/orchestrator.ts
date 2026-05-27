@@ -108,11 +108,16 @@ export interface ScheduleResult {
 export class Scheduler {
   private stopped = false;
   private turns = 0;
+  private wakeRef: (() => void) | null = null;
 
   constructor(private deps: SchedulerDeps) {}
 
   stop(): void {
     this.stopped = true;
+    // Unblock the run loop so a stop is acted on promptly even when every node
+    // is mid-flight; the loop re-checks `stopped` at the top. A spurious wake is
+    // harmless. Without this, `await tick` only resumes when a node settles.
+    this.wakeRef?.();
   }
 
   async run(adapterFor: (node: TaskNode) => AgentAdapter): Promise<ScheduleResult> {
@@ -134,10 +139,13 @@ export class Scheduler {
       tick = new Promise<void>((res) => { resolveTick = res; });
       r();
     };
+    this.wakeRef = wake;
 
     const runNode = async (node: TaskNode): Promise<void> => {
+      let created = false;
       try {
         const wt = await worktrees.create(node, integration.tip());
+        created = true;
         const agentId = `${node.role}#${node.id}`;
         const adapter = adapterFor(node);
         adapters.set(node.id, adapter);
@@ -148,11 +156,12 @@ export class Scheduler {
         const outcome = await integration.integrate(agentId, wt.branch);
         if (outcome.status === "merged") graph.complete(node.id);
         else failed.add(node.id);
-        await worktrees.remove(node);
       } catch (err) {
         failed.add(node.id);
         bus.publish({ kind: "error", from: `${node.role}#${node.id}`, message: String(err) });
       } finally {
+        // Always reclaim the worktree, even if startTask/integrate threw.
+        if (created) await worktrees.remove(node);
         inflight.delete(node.id);
         adapters.delete(node.id);
         wake();
@@ -174,6 +183,7 @@ export class Scheduler {
       for (const a of adapters.values()) a.interrupt();
     }
     off();
+    this.wakeRef = null;
     await Promise.allSettled([...inflight.values()]);
     await worktrees.pruneAll();
 

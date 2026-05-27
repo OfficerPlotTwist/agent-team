@@ -24,10 +24,22 @@ export class IntegrationCoordinator {
 
   /** Create the integration branch from `baseRef` and a dedicated worktree for it. */
   async init(baseRef: string): Promise<void> {
+    // Idempotent: clear any integration worktree left by a prior run before
+    // re-adding it. A missing worktree returns non-zero here, which we ignore.
+    await this.git.run(["worktree", "remove", "--force", this.worktreePath], this.repoRoot);
     const b = await this.git.run(["branch", "-f", this.branch, baseRef], this.repoRoot);
     if (b.code !== 0) throw new Error(`create integration branch failed: ${b.stderr.trim()}`);
     const w = await this.git.run(["worktree", "add", this.worktreePath, this.branch], this.repoRoot);
     if (w.code !== 0) throw new Error(`integration worktree add failed: ${w.stderr.trim()}`);
+  }
+
+  /**
+   * Remove the integration worktree. The branch is kept (work is landed from it).
+   * Call this once the integrated result has been landed — it is NOT invoked by
+   * the Scheduler, because the result must persist for the gated landing step.
+   */
+  async cleanup(): Promise<void> {
+    await this.git.run(["worktree", "remove", "--force", this.worktreePath], this.repoRoot);
   }
 
   /** The ref new agent worktrees are cut from: the integration branch tip. */

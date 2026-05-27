@@ -65,4 +65,28 @@ describe("IntegrationCoordinator", () => {
     expect(requests[0].from).toBe("coder#b");
     expect((requests[0].payload as { conflicts: string[] }).conflicts).toContain("shared.txt");
   });
+
+  it("init is idempotent — a second init over a leftover worktree succeeds", async () => {
+    const { dir, git } = await makeTempRepo();
+    const wm = new WorktreeManager(git, dir, noop);
+    const coord = new IntegrationCoordinator(git, wm, new MessageBus(), dir);
+    await coord.init("main");
+    // Second init must not throw on the already-registered integration worktree.
+    await expect(coord.init("main")).resolves.toBeUndefined();
+    expect(coord.tip()).toBe("agentteam/integration");
+  });
+
+  it("cleanup removes the integration worktree but keeps the branch", async () => {
+    const { dir, git } = await makeTempRepo();
+    const wm = new WorktreeManager(git, dir, noop);
+    const coord = new IntegrationCoordinator(git, wm, new MessageBus(), dir);
+    await coord.init("main");
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(`${dir}/.worktrees/integration`)).toBe(true);
+    await coord.cleanup();
+    expect(existsSync(`${dir}/.worktrees/integration`)).toBe(false);
+    // Branch is retained for landing.
+    const branches = await git.run(["branch", "--list", "agentteam/integration"], dir);
+    expect((branches as { stdout: string }).stdout).toContain("agentteam/integration");
+  });
 });
