@@ -16,6 +16,7 @@ export const CATEGORIES: readonly RequestCategory[] = [
   "judgment",
   "external_action",
   "destructive",
+  "merge_conflict",
   "info",
 ];
 

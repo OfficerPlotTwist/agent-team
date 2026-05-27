@@ -11,6 +11,7 @@ export type RequestCategory =
   | "judgment"
   | "external_action"
   | "destructive"
+  | "merge_conflict"
   | "info";
 
 export interface MessageEvent {

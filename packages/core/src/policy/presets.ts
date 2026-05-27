@@ -6,23 +6,28 @@ export type PresetName = "copilot" | "pair" | "autopilot";
 const PAIR: PolicyTable = {
   lead: {
     approval: { mode: "AUTO" }, credential: { mode: "GATE" }, judgment: { mode: "GATE" },
-    external_action: { mode: "ROUTE", route: "ops" }, destructive: { mode: "GATE" }, info: { mode: "AUTO" },
+    external_action: { mode: "ROUTE", route: "ops" }, destructive: { mode: "GATE" },
+    merge_conflict: { mode: "ROUTE", route: "lead" }, info: { mode: "AUTO" },
   },
   architect: {
     approval: { mode: "NOTIFY" }, credential: { mode: "GATE" }, judgment: { mode: "ROUTE", route: "lead" },
-    external_action: { mode: "GATE" }, destructive: { mode: "GATE" }, info: { mode: "AUTO" },
+    external_action: { mode: "GATE" }, destructive: { mode: "GATE" },
+    merge_conflict: { mode: "ROUTE", route: "lead" }, info: { mode: "AUTO" },
   },
   coder: {
     approval: { mode: "ROUTE", route: "reviewer" }, credential: { mode: "GATE" }, judgment: { mode: "ROUTE", route: "lead" },
-    external_action: { mode: "ROUTE", route: "ops" }, destructive: { mode: "GATE" }, info: { mode: "ROUTE", route: "lead" },
+    external_action: { mode: "ROUTE", route: "ops" }, destructive: { mode: "GATE" },
+    merge_conflict: { mode: "ROUTE", route: "lead" }, info: { mode: "ROUTE", route: "lead" },
   },
   reviewer: {
     approval: { mode: "AUTO" }, credential: { mode: "GATE" }, judgment: { mode: "ROUTE", route: "lead" },
-    external_action: { mode: "GATE" }, destructive: { mode: "GATE" }, info: { mode: "AUTO" },
+    external_action: { mode: "GATE" }, destructive: { mode: "GATE" },
+    merge_conflict: { mode: "ROUTE", route: "lead" }, info: { mode: "AUTO" },
   },
   ops: {
     approval: { mode: "NOTIFY" }, credential: { mode: "GATE" }, judgment: { mode: "GATE" },
-    external_action: { mode: "NOTIFY" }, destructive: { mode: "GATE" }, info: { mode: "AUTO" },
+    external_action: { mode: "NOTIFY" }, destructive: { mode: "GATE" },
+    merge_conflict: { mode: "ROUTE", route: "lead" }, info: { mode: "AUTO" },
   },
 };
 
