@@ -8,3 +8,8 @@ export * from "./policy/store.js";
 export * from "./broker.js";
 export * from "./diff-store.js";
 export * from "./orchestrator.js";
+export * from "./task-graph.js";
+export * from "./git.js";
+export * from "./context-provider.js";
+export * from "./worktree.js";
+export * from "./integration.js";
