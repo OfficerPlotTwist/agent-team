@@ -1,1 +1,10 @@
-export {};
+export { ClaudeAdapter } from "./claude-adapter.js";
+export type { ClaudeAdapterDeps } from "./claude-adapter.js";
+export { PendingPermissions } from "./pending-permissions.js";
+export { CostLedger } from "./cost-ledger.js";
+export { makePermissionBridge } from "./permission-bridge.js";
+export type { BridgeOptions } from "./permission-bridge.js";
+export { classifyTool } from "./tool-category.js";
+export { mapStreamMessage, interpretResult } from "./event-mapper.js";
+export type { ResultDecision } from "./event-mapper.js";
+export type { QueryFn } from "./query-types.js";
