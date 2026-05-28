@@ -88,7 +88,40 @@ describe("ClaudeAdapter", () => {
     await adapter.startTask({ goal: "x", role: "coder", agentId: "coder#a", cwd: repo, branch: "b" }, emit);
     const last = events[events.length - 1];
     expect(last.kind).toBe("error");
+    expect(last.kind === "error" && last.message).toContain("hit max turns");
     const log = await git.run(["log", "--oneline"], repo);
     expect(log.stdout.split("\n").filter(Boolean).length).toBe(1); // no commit
+  });
+
+  it("emits error and does NOT commit when git commit fails (exit code guard)", async () => {
+    const real = new NodeGitRunner();
+    // Stub: force only `git commit` to fail; delegate everything else to real git.
+    const failingGit: GitRunner = {
+      run: (args, cwd) =>
+        args[0] === "commit"
+          ? Promise.resolve({ stdout: "", stderr: "pre-commit hook rejected", code: 1 })
+          : real.run(args, cwd),
+    };
+    const query: QueryFn = async function* ({ options }) {
+      writeFileSync(join(options.cwd as string, "x.txt"), "x\n");
+      yield asMsg({ type: "result", subtype: "success", is_error: false, result: "made x", total_cost_usd: 0.01 });
+    };
+    const pending = new PendingPermissions();
+    const ledger = new CostLedger();
+    const adapter = new ClaudeAdapter({
+      query, git: failingGit, pending, ledger,
+      model: "claude-test", maxTurns: 5, permTimeoutMs: 1000,
+    });
+    const events: AgentEvent[] = [];
+    await adapter.startTask({ goal: "x", role: "coder", agentId: "coder#a", cwd: repo, branch: "b" }, (e) => events.push(e));
+
+    const last = events[events.length - 1];
+    expect(last.kind).toBe("error");
+    expect(last.kind === "error" && last.message).toContain("commit failed");
+    // file_change events were still emitted before the failed commit
+    expect(events.some((e) => e.kind === "file_change")).toBe(true);
+    // real repo has only the seed commit — nothing was committed
+    const log = await real.run(["log", "--oneline"], repo);
+    expect(log.stdout.split("\n").filter(Boolean).length).toBe(1);
   });
 });

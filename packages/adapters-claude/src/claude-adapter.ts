@@ -1,4 +1,4 @@
-import type { AgentAdapter, TaskContext, Emit, GitRunner, AgentEvent } from "@agent-team/core";
+import type { AgentAdapter, TaskContext, Emit, GitRunner } from "@agent-team/core";
 import { mapStreamMessage, interpretResult } from "./event-mapper.js";
 import { makePermissionBridge } from "./permission-bridge.js";
 import type { PendingPermissions } from "./pending-permissions.js";
@@ -26,6 +26,7 @@ export class ClaudeAdapter implements AgentAdapter {
   async startTask(ctx: TaskContext, emit: Emit): Promise<void> {
     const agentId = ctx.agentId;
     const cwd = ctx.cwd;
+    this.interrupted = false; // reset per task so an adapter instance is safely reusable
     if (!cwd) {
       emit({ kind: "error", from: agentId, message: "ClaudeAdapter requires ctx.cwd (worktree path)" });
       return;
@@ -47,8 +48,12 @@ export class ClaudeAdapter implements AgentAdapter {
           model: this.deps.model,
           maxTurns: this.deps.maxTurns,
           permissionMode: "default",
+          // Read-only tools auto-allow at the SDK level (they bypass canUseTool); every
+          // other tool is gated through canUseTool -> action_request.
           allowedTools: ["Read", "Glob", "Grep"],
-          disallowedTools: ["Bash(git*)"],
+          // Adapter owns commits, so the agent must not run git itself. SDK-canonical
+          // rule syntax uses a space before the glob (verify blocking in the live smoke).
+          disallowedTools: ["Bash(git *)"],
           canUseTool,
           abortController: this.abort,
         },
@@ -97,7 +102,11 @@ export class ClaudeAdapter implements AgentAdapter {
       const d = await git.run(["diff", "--cached", "--", file], cwd);
       emit({ kind: "file_change", from: agentId, proposalId: `${agentId}-${i++}`, path: file, diff: d.stdout });
     }
-    await git.run(["commit", "-m", `${agentId}: ${summary}`], cwd);
+    const committed = await git.run(["commit", "-m", `${agentId}: ${summary}`], cwd);
+    if (committed.code !== 0) {
+      emit({ kind: "error", from: agentId, message: `git commit failed: ${committed.stderr.trim()}` });
+      return;
+    }
     emit({ kind: "done", from: agentId, summary });
   }
 
@@ -106,6 +115,3 @@ export class ClaudeAdapter implements AgentAdapter {
     this.abort?.abort();
   }
 }
-
-// re-export so consumers can build event arrays in tests without deep imports
-export type { AgentEvent };
