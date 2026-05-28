@@ -4,30 +4,29 @@ import { PendingPermissions } from "../src/pending-permissions.js";
 import { makePermissionBridge } from "../src/permission-bridge.js";
 
 describe("makePermissionBridge", () => {
-  it("emits an action_request with the classified category and awaits resolution", async () => {
+  it("emits an action_request with the classified category and resolves synchronously in-emit", async () => {
     const pending = new PendingPermissions();
     const events: AgentEvent[] = [];
+    // Host resolves the request synchronously INSIDE the emit callback. This only
+    // works if the bridge registered the resolver BEFORE emitting — it regression-
+    // guards the register-before-emit ordering invariant.
     const bridge = makePermissionBridge({
       agentId: "coder#a",
-      emit: (e) => events.push(e),
+      emit: (e) => {
+        events.push(e);
+        if (e.kind === "action_request") {
+          expect(e.category).toBe("approval");
+          expect(e.from).toBe("coder#a");
+          pending.resolve(e.requestId, { behavior: "allow" });
+        }
+      },
       pending,
       timeoutMs: 1000,
     });
 
-    // Simulate the host resolving the request as soon as it is emitted.
-    const original = pending.register.bind(pending);
-    // Kick off the gated call; resolve on next tick.
-    const callPromise = bridge("Write", { file_path: "a.ts" }, {} as never);
-    // The bridge registers then emits synchronously; grab the requestId from the event.
-    const req = events.find((e) => e.kind === "action_request");
-    expect(req).toBeTruthy();
-    if (req && req.kind === "action_request") {
-      expect(req.category).toBe("approval");
-      expect(req.from).toBe("coder#a");
-      pending.resolve(req.requestId, { behavior: "allow" });
-    }
-    void original;
-    await expect(callPromise).resolves.toEqual({ behavior: "allow" });
+    const result = await bridge("Write", { file_path: "a.ts" }, {} as never);
+    expect(result).toEqual({ behavior: "allow" });
+    expect(events.some((e) => e.kind === "action_request")).toBe(true);
   });
 
   it("returns deny when the request is denied", async () => {
