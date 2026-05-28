@@ -1,0 +1,12 @@
+{
+  "name": "agent-team-workspace",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @agent-team/core && npm run build -w @agent-team/adapters-claude && npm run build -w @agent-team/host-headless",
+    "test": "npm run test -w @agent-team/core && npm run test -w @agent-team/adapters-claude && npm run test -w @agent-team/host-headless",
+    "build:core": "npm run build -w @agent-team/core"
+  }
+}
