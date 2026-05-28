@@ -125,6 +125,18 @@ describe("ClaudeAdapter", () => {
     expect(log.stdout.split("\n").filter(Boolean).length).toBe(1);
   });
 
+  it("requests the claude_code system-prompt preset so the agent knows its working directory", async () => {
+    let captured: { systemPrompt?: unknown; cwd?: unknown } | undefined;
+    const query: QueryFn = async function* (args) {
+      captured = args.options as { systemPrompt?: unknown; cwd?: unknown };
+      yield asMsg({ type: "result", subtype: "success", is_error: false, result: "ok", total_cost_usd: 0 });
+    };
+    const { adapter, emit } = run(query);
+    await adapter.startTask({ goal: "x", role: "coder", agentId: "coder#a", cwd: repo, branch: "b" }, emit);
+    expect(captured?.systemPrompt).toEqual({ type: "preset", preset: "claude_code" });
+    expect(captured?.cwd).toBe(repo);
+  });
+
   it("interrupt() during the stream: no commit, no spurious error event", async () => {
     const query: QueryFn = async function* ({ options }) {
       yield asMsg({ type: "assistant", message: { content: [{ type: "text", text: "working" }] } });

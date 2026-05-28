@@ -44,6 +44,9 @@ export class ClaudeAdapter implements AgentAdapter {
       const stream = this.deps.query({
         prompt: ctx.goal,
         options: {
+          // The claude_code preset injects the <env>Working directory</env> context so the
+          // agent writes into the worktree cwd, not ~/.claude (the minimal default omits it).
+          systemPrompt: { type: "preset", preset: "claude_code" },
           cwd,
           model: this.deps.model,
           maxTurns: this.deps.maxTurns,
