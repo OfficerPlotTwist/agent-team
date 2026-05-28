@@ -124,4 +124,28 @@ describe("ClaudeAdapter", () => {
     const log = await real.run(["log", "--oneline"], repo);
     expect(log.stdout.split("\n").filter(Boolean).length).toBe(1);
   });
+
+  it("interrupt() during the stream: no commit, no spurious error event", async () => {
+    const query: QueryFn = async function* ({ options }) {
+      yield asMsg({ type: "assistant", message: { content: [{ type: "text", text: "working" }] } });
+      // Block until aborted, then throw like the real SDK does on abort.
+      await new Promise<void>((_resolve, reject) => {
+        const sig = (options as { abortController?: AbortController }).abortController?.signal;
+        if (sig?.aborted) reject(new Error("AbortError"));
+        else sig?.addEventListener("abort", () => reject(new Error("AbortError")));
+      });
+      yield asMsg({ type: "result", subtype: "success", is_error: false, result: "unreached", total_cost_usd: 1 });
+    };
+    const { adapter, events, emit } = run(query);
+    const p = adapter.startTask({ goal: "x", role: "coder", agentId: "coder#a", cwd: repo, branch: "b" }, emit);
+    await new Promise((r) => setTimeout(r, 20)); // let the first assistant message flow
+    adapter.interrupt();
+    await p;
+
+    expect(events.some((e) => e.kind === "message")).toBe(true);     // streamed before interrupt
+    expect(events.some((e) => e.kind === "error")).toBe(false);      // NO spurious error
+    expect(events.some((e) => e.kind === "done")).toBe(false);       // no commit/done
+    const log = await git.run(["log", "--oneline"], repo);
+    expect(log.stdout.split("\n").filter(Boolean).length).toBe(1);   // seed only — nothing committed
+  });
 });

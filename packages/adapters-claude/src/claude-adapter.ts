@@ -63,6 +63,8 @@ export class ClaudeAdapter implements AgentAdapter {
         if ((msg as { type?: string }).type === "result") resultMsg = msg;
       }
     } catch (err) {
+      // A deliberate interrupt aborts the query (the SDK throws); that is not an error.
+      if (this.interrupted) return;
       emit({ kind: "error", from: agentId, message: `query failed: ${String(err)}` });
       return;
     }
