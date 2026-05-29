@@ -16,6 +16,7 @@ import type {
   AgentId,
   Role,
   BrokerHandlers,
+  AgentAdapter,
 } from "@agent-team/core";
 import { NodeGitRunner } from "@agent-team/core/node";
 import {
@@ -24,6 +25,7 @@ import {
   CostLedger,
   type QueryFn,
 } from "@agent-team/adapters-claude";
+import { BudgetExceededAdapter } from "./budget-guard.js";
 
 export interface ComposeOptions {
   repoRoot: string;
@@ -32,6 +34,10 @@ export interface ComposeOptions {
   model: string;
   maxTurns: number;
   permTimeoutMs: number;
+  /** Optional team budget cap (USD). When ledger.total() reaches it, further nodes
+   *  are refused (no spend) at dispatch time. Omitted ⇒ no enforcement. Best-effort:
+   *  nodes already running in the same parallel wave are not clawed back. */
+  costCeilingUsd?: number;
   /** Resolve a GATE interactively. Defaults to deny (non-interactive safety). */
   onGate?: (req: ActionRequestEvent) => Promise<boolean>;
   git?: GitRunner;
@@ -95,8 +101,11 @@ export function composeHeadless(opts: ComposeOptions): ComposedHost {
     baseRef: BASE_REF,
   });
 
-  const adapterFor = (_node: TaskNode): ClaudeAdapter =>
-    new ClaudeAdapter({
+  const adapterFor = (_node: TaskNode): AgentAdapter => {
+    if (opts.costCeilingUsd != null && ledger.total() >= opts.costCeilingUsd) {
+      return new BudgetExceededAdapter(opts.costCeilingUsd, ledger.total());
+    }
+    return new ClaudeAdapter({
       query: opts.query,
       git,
       pending,
@@ -105,6 +114,7 @@ export function composeHeadless(opts: ComposeOptions): ComposedHost {
       maxTurns: opts.maxTurns,
       permTimeoutMs: opts.permTimeoutMs,
     });
+  };
 
   return {
     scheduler,
