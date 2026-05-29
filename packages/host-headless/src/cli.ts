@@ -2,32 +2,43 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { readFileSync } from "node:fs";
 import { TaskGraph } from "@agent-team/core";
-import type { BusEvent, ActionRequestEvent } from "@agent-team/core";
+import type { BusEvent, ActionRequestEvent, TaskNode } from "@agent-team/core";
 import type { QueryFn } from "@agent-team/adapters-claude";
 import { composeHeadless } from "./compose.js";
 
 interface Args {
-  goal: string;
+  goal?: string;
+  graph?: string;
   repo: string;
   model: string;
   maxTurns: number;
   role: string;
+  costCeiling?: number;
 }
 
 function parseArgs(argv: string[]): Args {
-  const get = (flag: string, def?: string): string => {
+  const getOpt = (flag: string): string | undefined => {
     const i = argv.indexOf(flag);
-    if (i >= 0 && i + 1 < argv.length) return argv[i + 1];
-    if (def !== undefined) return def;
-    throw new Error(`missing required flag ${flag}`);
+    return i >= 0 && i + 1 < argv.length ? argv[i + 1] : undefined;
   };
+  const get = (flag: string, def: string): string => getOpt(flag) ?? def;
+
+  const graph = getOpt("--graph");
+  const goal = getOpt("--goal");
+  if (graph === undefined && goal === undefined) {
+    throw new Error("provide --goal <text> or --graph <file.json>");
+  }
+  const ceilingRaw = getOpt("--cost-ceiling");
   return {
-    goal: get("--goal"),
+    goal,
+    graph,
     repo: get("--repo", process.cwd()),
     model: get("--model", "claude-opus-4-6"),
     maxTurns: Number(get("--max-turns", "50")),
     role: get("--role", "coder"),
+    costCeiling: ceilingRaw !== undefined ? Number(ceilingRaw) : undefined,
   };
 }
 
@@ -44,9 +55,9 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   await ensureIntegrationBranch(args.repo);
 
-  const graph = new TaskGraph([
-    { id: "n1", role: args.role as never, goal: args.goal, dependsOn: [] },
-  ]);
+  const graph = args.graph
+    ? new TaskGraph(JSON.parse(readFileSync(args.graph, "utf8")) as TaskNode[])
+    : new TaskGraph([{ id: "n1", role: args.role as never, goal: args.goal as string, dependsOn: [] }]);
 
   const rl = createInterface({ input: stdin, output: stdout });
   const host = composeHeadless({
@@ -56,6 +67,7 @@ async function main(): Promise<void> {
     model: args.model,
     maxTurns: args.maxTurns,
     permTimeoutMs: 60_000,
+    costCeilingUsd: args.costCeiling,
     onGate: async (req: ActionRequestEvent) => {
       const ans = await rl.question(`GATE [${req.category}] ${req.summary} — allow? [y/N] `);
       return ans.trim().toLowerCase() === "y";
