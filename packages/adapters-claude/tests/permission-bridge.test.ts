@@ -25,8 +25,25 @@ describe("makePermissionBridge", () => {
     });
 
     const result = await bridge("Write", { file_path: "a.ts" }, {} as never);
-    expect(result).toEqual({ behavior: "allow" });
+    expect(result).toEqual({ behavior: "allow", updatedInput: { file_path: "a.ts" } });
     expect(events.some((e) => e.kind === "action_request")).toBe(true);
+  });
+
+  it("echoes the tool input as updatedInput on allow (SDK requires it)", async () => {
+    const pending = new PendingPermissions();
+    const events: AgentEvent[] = [];
+    const bridge = makePermissionBridge({
+      agentId: "coder#a",
+      emit: (e) => {
+        events.push(e);
+        if (e.kind === "action_request") pending.resolve(e.requestId, { behavior: "allow" });
+      },
+      pending,
+      timeoutMs: 1000,
+    });
+    const input = { file_path: "a.ts", content: "x" };
+    const result = await bridge("Write", input, {} as never);
+    expect(result).toEqual({ behavior: "allow", updatedInput: input });
   });
 
   it("returns deny when the request is denied", async () => {

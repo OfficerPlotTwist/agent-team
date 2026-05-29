@@ -31,6 +31,11 @@ export function makePermissionBridge(opts: BridgeOptions): CanUseTool {
       payload: { toolName, input },
       timeoutMs: opts.timeoutMs,
     });
-    return await decision;
+    const result = await decision;
+    // The SDK's runtime schema requires updatedInput on allow (echo the input unchanged
+    // unless the host already supplied a modified one). Deny passes through untouched.
+    return result.behavior === "allow"
+      ? { ...result, updatedInput: result.updatedInput ?? input }
+      : result;
   };
 }
