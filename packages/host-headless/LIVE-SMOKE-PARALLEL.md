@@ -25,7 +25,7 @@ are NOT OS-sandboxed.
    ```
 3. Run:
    ```sh
-   node "/c/Users/nik/Documents/AI/vsCode Fork/packages/host-headless/dist/cli.js" --graph "$tmp/graph.json" --repo "$tmp" --max-turns 6
+   node "/c/Users/nik/Documents/AI/vsCode Fork/packages/host-headless/dist/cli.js" --graph "$tmp/graph.json" --repo "$tmp" --max-turns 50
    ```
 4. Confirm: both `coder#a` and `architect#b` appear on the feed; each shows `~ <file>` + `✓ done`;
    `git show agentteam/integration:alpha.txt` and `:beta.txt` both succeed; `total cost` ≈ sum; `completed: a, b`.
@@ -43,13 +43,23 @@ are NOT OS-sandboxed.
    ```
 3. Run with a ceiling BELOW one node's expected cost (e.g. 0.01):
    ```sh
-   node "/c/Users/nik/Documents/AI/vsCode Fork/packages/host-headless/dist/cli.js" --graph "$tmp/graph.json" --repo "$tmp" --cost-ceiling 0.01 --max-turns 6
+   node "/c/Users/nik/Documents/AI/vsCode Fork/packages/host-headless/dist/cli.js" --graph "$tmp/graph.json" --repo "$tmp" --cost-ceiling 0.01 --max-turns 50
    ```
 4. Confirm the refusal by its AUTHORITATIVE signals: `b` shows `✗ … team cost ceiling $0.0100 reached …`
    on the feed, and `git show agentteam/integration:b.txt` FAILS (b's work was never merged — no spend).
    `a.txt` is present. NOTE: `b` may still appear in the final `completed:` line — that is a known
    Scheduler reporting limitation (an error-emitting node empty-merges as "completed"); the error
    event + absent `b.txt` are the real proof `b` was refused.
+
+## maxTurns is a GLOBAL event budget — scale it with node count
+`--max-turns` (the Scheduler `budget.maxTurns`) increments on **every bus event across ALL
+parallel agents**, not per agent. Set it too low for the number of concurrent nodes and the
+budget is exhausted mid-run: the Scheduler interrupts in-flight adapters, and an interrupted
+`ClaudeAdapter` returns **before** `commitAndEmit`, so its uncommitted worktree changes are
+**silently lost while the node still reports `completed`** (its empty branch no-op-merges).
+Observed live: 2 parallel nodes at `--max-turns 6` lost one agent's file. Use a generous
+budget (≥ ~25/node; 50 is safe for these 2-node smokes). Hardening this (don't mark
+interrupted/empty-merge nodes as completed) is a Scheduler/core change, tracked for a later milestone.
 
 ## Best-effort note
 The ceiling is enforced at node-dispatch time against `ledger.total()`. Two INDEPENDENT nodes
