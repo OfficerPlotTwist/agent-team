@@ -64,7 +64,7 @@ The ledger only grows from real adapter successes; the guard only reads `ledger.
 
 ## Error handling
 - `costCeilingUsd` omitted/`undefined` ⇒ no guard (regression-safe default).
-- A budget-refused node emits `error` and appears in `ScheduleResult.blocked` (consistent with other failed nodes; B2 does not add a new status — see the deferred S2 note that `blocked` doesn't yet distinguish "ran and failed" from "never started").
+- A budget-refused node emits `error` and **does no work** — verified by: `ledger.total()` excludes it (no spend) and its file never reaches the integration tip (no merge of refused work). **Reporting caveat (confirmed against `orchestrator.ts`):** because the guard *emits* an error rather than *throwing* — exactly like `ClaudeAdapter` does on a failed result — `runNode` still performs an empty no-op merge of the untouched worktree, so a refused node lands in `ScheduleResult.completed`, not `blocked`. The authoritative skip signals are the **`team cost ceiling` error event** and the **absent file**, not the `completed`/`blocked` lists. Making error-emitting nodes report as not-completed is a Scheduler change (core) — deliberately out of B2's no-arch-change scope; it folds into the existing deferred item that `blocked` doesn't distinguish "ran and failed" from "never started". B2 does not special-case the budget adapter to throw, because that would make budget-skips report differently from real agent errors.
 - `--graph` file missing/malformed ⇒ CLI prints `fatal: …` and exits non-zero (existing CLI error path).
 
 ## Testing
