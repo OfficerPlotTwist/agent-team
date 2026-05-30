@@ -52,14 +52,12 @@ describe("host-headless cost ceiling (offline)", () => {
 
     const result = await host.run();
 
-    // Real ScheduleResult contract: `completed` = graph.completedIds() (nodes whose
-    // integration merge succeeded). A budget-refused node emits an error but does NOT
-    // throw, so runNode still calls integration.integrate on its EMPTY worktree branch
-    // (no SDK ran, no file written) — that empty merge succeeds, so "b" lands in
-    // `completed` too. The budget invariants below (no spend, beta.txt absent, ceiling
-    // error emitted) are what actually prove the node was refused.
+    // Since the core robustness pass gates completion on a real `done` event, the
+    // budget-refused node (emits error, no done) reports in `blocked`, not `completed`,
+    // and its branch is not merged. No spend on b, and beta.txt never reaches integration.
     expect(result.completed).toContain("a");
-    expect(result.completed).toContain("b");
+    expect(result.completed).not.toContain("b");
+    expect(result.blocked).toContain("b");
     expect(feed.some((e) => e.kind === "error" && e.message.includes("team cost ceiling"))).toBe(true);
     expect(host.ledger.total()).toBeCloseTo(0.05);
     expect((await git.run(["show", "agentteam/integration:alpha.txt"], repo)).code).toBe(0);
