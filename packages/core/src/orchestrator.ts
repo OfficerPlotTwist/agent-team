@@ -107,7 +107,6 @@ export interface ScheduleResult {
  */
 export class Scheduler {
   private stopped = false;
-  private turns = 0;
   private wakeRef: (() => void) | null = null;
 
   constructor(private deps: SchedulerDeps) {}
@@ -123,13 +122,28 @@ export class Scheduler {
   async run(adapterFor: (node: TaskNode) => AgentAdapter): Promise<ScheduleResult> {
     const { bus, budget, graph, worktrees, integration, baseRef } = this.deps;
     this.stopped = false;
-    this.turns = 0;
     await integration.init(baseRef);
 
-    const off = bus.subscribe(() => { this.turns += 1; });
+    // Per-agent turn budget + done tracking. Turns are counted per agentId so an
+    // over-budget node is interrupted alone (Fix 1); only a node that emitted a
+    // `done` event may merge + complete (Fix 2).
+    const doneAgents = new Set<string>();
+    const turnsByAgent = new Map<string, number>();
+    const adapterByAgent = new Map<string, AgentAdapter>();
+    let budgetHit = false;
     const inflight = new Map<string, Promise<void>>();
     const adapters = new Map<string, AgentAdapter>();
     const failed = new Set<string>();
+
+    const off = bus.subscribe((e) => {
+      if (e.kind === "done") doneAgents.add(e.from);
+      const n = (turnsByAgent.get(e.from) ?? 0) + 1;
+      turnsByAgent.set(e.from, n);
+      if (n >= budget.maxTurns) {
+        const a = adapterByAgent.get(e.from);
+        if (a) { budgetHit = true; a.interrupt(); }
+      }
+    });
 
     // A "tick" promise that resolves whenever any node settles, so the loop wakes.
     let resolveTick!: () => void;
@@ -169,7 +183,7 @@ export class Scheduler {
     };
 
     while (!graph.isDone()) {
-      if (this.stopped || this.turns >= budget.maxTurns) break;
+      if (this.stopped) break;
       for (const node of graph.ready()) {
         if (inflight.has(node.id) || failed.has(node.id)) continue;
         graph.start(node.id);
@@ -179,7 +193,7 @@ export class Scheduler {
       await tick;
     }
 
-    if (this.stopped || this.turns >= budget.maxTurns) {
+    if (this.stopped) {
       for (const a of adapters.values()) a.interrupt();
     }
     off();
@@ -194,7 +208,7 @@ export class Scheduler {
       ? "complete"
       : this.stopped
         ? "stopped"
-        : this.turns >= budget.maxTurns
+        : budgetHit
           ? "budget"
           : "blocked";
     return { status, completed, blocked };

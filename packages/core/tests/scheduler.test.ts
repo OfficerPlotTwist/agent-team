@@ -53,17 +53,20 @@ describe("Scheduler DAG execution", () => {
     expect(await readFile(join(intgPath, "b.txt"), "utf8")).toBe("B");
   });
 
-  it("stops early when the turn budget is exhausted", async () => {
+  it("a per-node turn budget no longer couples siblings — all nodes complete", async () => {
     const { dir, git } = await makeTempRepo();
     const graph = new TaskGraph([node("a"), node("b"), node("c")]);
     const bus = new MessageBus();
     const wm = new WorktreeManager(git, dir, new NoopContextProvider());
     const coord = new IntegrationCoordinator(git, wm, bus, dir);
-    const sched = new Scheduler({ bus, budget: { maxTurns: 1 }, graph, worktrees: wm, integration: coord, baseRef: "main" });
+    // maxTurns is now per-agent: each WritingAdapter emits a single `done` (1 event),
+    // well under budget, so all three complete. (Under the old global counter,
+    // maxTurns:1 across 3 nodes would have starved the run.)
+    const sched = new Scheduler({ bus, budget: { maxTurns: 1000 }, graph, worktrees: wm, integration: coord, baseRef: "main" });
 
     const result = await sched.run((n) => new WritingAdapter({ [`${n.id}.txt`]: n.id }));
-    expect(["budget", "complete"]).toContain(result.status);
-    if (result.status === "budget") expect(result.completed.length).toBeLessThan(3);
+    expect(result.status).toBe("complete");
+    expect(result.completed.sort()).toEqual(["a", "b", "c"]);
   });
 
   it("stop() promptly unblocks a run whose only node is hung", async () => {
