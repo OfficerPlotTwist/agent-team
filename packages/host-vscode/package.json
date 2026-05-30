@@ -1,0 +1,31 @@
+{
+  "name": "@agent-team/host-vscode",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/extension.js",
+  "engines": { "vscode": "^1.85.0" },
+  "activationEvents": ["onCommand:agent-team.run"],
+  "contributes": {
+    "commands": [
+      { "command": "agent-team.run", "title": "Agent Team: Run" }
+    ]
+  },
+  "files": ["dist", "media"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-team/core": "*",
+    "@agent-team/adapters-claude": "*",
+    "@anthropic-ai/claude-agent-sdk": "0.3.154"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}
