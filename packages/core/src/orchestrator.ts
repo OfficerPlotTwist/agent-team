@@ -163,13 +163,18 @@ export class Scheduler {
         const agentId = `${node.role}#${node.id}`;
         const adapter = adapterFor(node);
         adapters.set(node.id, adapter);
+        adapterByAgent.set(agentId, adapter);
         await adapter.startTask(
           { goal: node.goal, role: node.role, agentId, cwd: wt.path, branch: wt.branch },
           (event) => bus.publish(event),
         );
-        const outcome = await integration.integrate(agentId, wt.branch);
-        if (outcome.status === "merged") graph.complete(node.id);
-        else failed.add(node.id);
+        if (doneAgents.has(agentId)) {
+          const outcome = await integration.integrate(agentId, wt.branch);
+          if (outcome.status === "merged") graph.complete(node.id);
+          else failed.add(node.id);
+        } else {
+          failed.add(node.id);
+        }
       } catch (err) {
         failed.add(node.id);
         bus.publish({ kind: "error", from: `${node.role}#${node.id}`, message: String(err) });
@@ -178,6 +183,7 @@ export class Scheduler {
         if (created) await worktrees.remove(node);
         inflight.delete(node.id);
         adapters.delete(node.id);
+        adapterByAgent.delete(`${node.role}#${node.id}`);
         wake();
       }
     };
