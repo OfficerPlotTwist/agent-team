@@ -8,8 +8,8 @@ import {
   WorktreeManager,
   IntegrationCoordinator,
   Scheduler,
-  NoopContextProvider,
   TaskGraph,
+  pickModality,
 } from "@agent-team/core";
 import type {
   TaskNode,
@@ -21,7 +21,7 @@ import type {
   AgentAdapter,
   ScheduleResult,
 } from "@agent-team/core";
-import { NodeGitRunner } from "@agent-team/core/node";
+import { NodeGitRunner, TextContextProvider } from "@agent-team/core/node";
 import {
   ClaudeAdapter,
   PendingPermissions,
@@ -29,6 +29,7 @@ import {
   type QueryFn,
 } from "@agent-team/adapters-claude";
 import type { ControlRoomPanel } from "./control-room/panel.js";
+import type { EditorStateSource } from "./editor-state-source.js";
 
 const BASE_REF = "agentteam/integration";
 
@@ -43,6 +44,7 @@ async function ensureIntegrationBranch(repoRoot: string): Promise<void> {
 export async function composeVscode(
   graphPath: string,
   panel: ControlRoomPanel,
+  editorStateSource: EditorStateSource,
 ): Promise<ScheduleResult> {
   const repoRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!repoRoot) throw new Error("No workspace folder open — open a git repo first.");
@@ -88,7 +90,19 @@ export async function composeVscode(
   // Forward every bus event to the live feed
   bus.subscribe((e: BusEvent) => panel.pushEvent(e));
 
-  const worktrees = new WorktreeManager(git, repoRoot, new NoopContextProvider());
+  const contextModalities = ["text"] as const; // every adapter is text today
+  const worktrees = new WorktreeManager(
+    git,
+    repoRoot,
+    new TextContextProvider(),
+    () => {
+      const editor = editorStateSource.current();
+      return {
+        envelope: editor ? { editor } : undefined,
+        modality: pickModality(contextModalities),
+      };
+    },
+  );
   const integration = new IntegrationCoordinator(git, worktrees, bus, repoRoot);
   const scheduler = new Scheduler({
     bus,
