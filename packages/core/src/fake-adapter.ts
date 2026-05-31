@@ -3,6 +3,7 @@ import type { AgentEvent } from "./events.js";
 
 export class FakeAdapter implements AgentAdapter {
   readonly backend = "fake";
+  readonly contextModalities = ["text"] as const;
   private interrupted = false;
   /** The most recent context passed to startTask (for test assertions). */
   lastContext?: TaskContext;

@@ -1,4 +1,5 @@
 import type { AgentEvent, Role, AgentId } from "./events.js";
+import type { ContextModality } from "./context-envelope.js";
 
 export interface TaskContext {
   goal: string;
@@ -15,6 +16,8 @@ export type Emit = (event: AgentEvent) => void;
 export interface AgentAdapter {
   /** Backend identifier, e.g. "fake" | "claude" | "codewhale". */
   readonly backend: string;
+  /** Context modalities this adapter can consume, richest first. */
+  readonly contextModalities: readonly ContextModality[];
   /** Run one task to completion; resolves after the adapter emits a terminal event or is interrupted. */
   startTask(ctx: TaskContext, emit: Emit): Promise<void>;
   /** Cancel the in-flight task. */
