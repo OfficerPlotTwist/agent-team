@@ -8,6 +8,7 @@ import type { AgentAdapter, TaskContext, Emit } from "@agent-team/core";
 export class BudgetExceededAdapter implements AgentAdapter {
   readonly backend = "budget-guard";
 
+  readonly contextModalities = ["text"] as const;
   constructor(
     private readonly ceilingUsd: number,
     private readonly spentUsd: number,
