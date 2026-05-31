@@ -1,6 +1,7 @@
 import type { GitRunner } from "./git.js";
 import type { ContextProvider } from "./context-provider.js";
 import type { TaskNode } from "./task-graph.js";
+import type { ContextEnvelope, ContextModality } from "./context-envelope.js";
 
 export interface Worktree {
   path: string;
@@ -9,11 +10,18 @@ export interface Worktree {
 
 export type MergeResult = { ok: true } | { ok: false; conflicts: string[] };
 
+/** Supplies the per-node context envelope + modality at dispatch time. */
+export type EnvelopeSupplier = (node: TaskNode) => {
+  envelope?: ContextEnvelope;
+  modality?: ContextModality;
+};
+
 export class WorktreeManager {
   constructor(
     private readonly git: GitRunner,
     private readonly repoRoot: string,
     private readonly context: ContextProvider,
+    private readonly envelopeSupplier?: EnvelopeSupplier,
   ) {}
 
   private name(node: TaskNode): string {
@@ -33,7 +41,8 @@ export class WorktreeManager {
     const branch = this.branchFor(node);
     const res = await this.git.run(["worktree", "add", "-b", branch, path, base], this.repoRoot);
     if (res.code !== 0) throw new Error(`git worktree add failed: ${res.stderr.trim()}`);
-    await this.context.hydrate(node, path);
+    const supplied = this.envelopeSupplier?.(node);
+    await this.context.hydrate(node, path, supplied?.envelope, supplied?.modality);
     return { path, branch };
   }
 
