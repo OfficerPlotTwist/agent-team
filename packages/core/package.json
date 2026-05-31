@@ -11,8 +11,8 @@
       "default": "./dist/index.js"
     },
     "./node": {
-      "types": "./dist/node/git-runner.d.ts",
-      "default": "./dist/node/git-runner.js"
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
     }
   },
   "scripts": {
