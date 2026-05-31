@@ -11,5 +11,6 @@ export * from "./orchestrator.js";
 export * from "./task-graph.js";
 export * from "./git.js";
 export * from "./context-provider.js";
+export * from "./context-envelope.js";
 export * from "./worktree.js";
 export * from "./integration.js";
