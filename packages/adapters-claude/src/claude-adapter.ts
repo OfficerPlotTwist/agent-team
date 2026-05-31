@@ -18,6 +18,7 @@ export interface ClaudeAdapterDeps {
 
 export class ClaudeAdapter implements AgentAdapter {
   readonly backend = "claude";
+  readonly contextModalities = ["text"] as const;
   private abort?: AbortController;
   private interrupted = false;
 

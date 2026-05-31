@@ -4,6 +4,7 @@ import { runLoop } from "./loop.js";
 
 export class DeepSeekAdapter implements AgentAdapter {
   readonly backend = "deepseek";
+  readonly contextModalities = ["text"] as const;
   #interrupted = false;
 
   constructor(
