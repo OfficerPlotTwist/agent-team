@@ -113,7 +113,7 @@ Write-back (an agent recording new decisions/entities *into* the KG) is the comp
 
 ## 7. Out of scope (S2)
 
-- Knowledge-graph shared memory → **S5** (separate sub-project: graphiti-style entities/relationships/decisions as team context). S2 builds only the `ContextProvider` *seam* (§3.3) with a no-op default; the KG-backed provider and any write-back (`record()`) are S5.
+- Shared-memory context provider → **S5** (separate sub-project). S2 builds only the `ContextProvider` *seam* (§3.3) with a no-op default; the real provider and any write-back (`record()`) are S5. **Backend chosen 2026-05-27 (`best-graph-analysis.md`):** `sqlite-vec`/`better-sqlite3` with an injected `Embedder` port — graphiti is dropped. S5 v1 is **vector retrieval over a flat `decisions` table**, not a graph (graph traversal deferred until a query needs it), so the "knowledge-graph" framing below is superseded by "semantic-retrieval memory, graph-on-demand."
 - VS Code extension / Control Room webview → Plan B.
 - Real Claude / CodeWhale adapters → Plan B (this spec exercises the DAG + worktrees with FakeAdapters).
 - Automatic (non-gated) landing of the integration branch into the user's branch.
@@ -124,7 +124,7 @@ Write-back (an agent recording new decisions/entities *into* the KG) is the comp
 - **S1** — Talking Team Core (done, merged).
 - **S2** — Parallel worktree isolation **+ task-DAG scheduling** (this spec).
 - **Plan B** — VS Code extension + Claude/CodeWhale adapters + Control Room webview.
-- **S3** — Deep editor fusion. **S4** — Ambient agents. **S5** — Knowledge-graph shared memory.
+- **S3** — Deep editor fusion. **S4** — Ambient agents. **S5** — Shared-memory context provider (sqlite-vec retrieval; graph-on-demand — see `best-graph-analysis.md`).
 
 ## 9. Open items for planning
 
