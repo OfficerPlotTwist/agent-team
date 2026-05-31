@@ -5,7 +5,7 @@ import {
   WorktreeManager,
   IntegrationCoordinator,
   Scheduler,
-  NoopContextProvider,
+  pickModality,
 } from "@agent-team/core";
 import type {
   TaskGraph,
@@ -18,7 +18,7 @@ import type {
   BrokerHandlers,
   AgentAdapter,
 } from "@agent-team/core";
-import { NodeGitRunner } from "@agent-team/core/node";
+import { NodeGitRunner, TextContextProvider } from "@agent-team/core/node";
 import {
   ClaudeAdapter,
   PendingPermissions,
@@ -41,6 +41,8 @@ export interface ComposeOptions {
   /** Resolve a GATE interactively. Defaults to deny (non-interactive safety). */
   onGate?: (req: ActionRequestEvent) => Promise<boolean>;
   git?: GitRunner;
+  /** Optional static editor state (offline driver for the S3 hydrate seam). */
+  editorState?: import("@agent-team/core").EditorState;
 }
 
 export interface ComposedHost {
@@ -90,7 +92,16 @@ export function composeHeadless(opts: ComposeOptions): ComposedHost {
     }
   });
 
-  const worktrees = new WorktreeManager(git, opts.repoRoot, new NoopContextProvider());
+  const contextModalities = ["text"] as const;
+  const worktrees = new WorktreeManager(
+    git,
+    opts.repoRoot,
+    new TextContextProvider(),
+    () => ({
+      envelope: opts.editorState ? { editor: opts.editorState } : undefined,
+      modality: pickModality(contextModalities),
+    }),
+  );
   const integration = new IntegrationCoordinator(git, worktrees, bus, opts.repoRoot);
   const scheduler = new Scheduler({
     bus,

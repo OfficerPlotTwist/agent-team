@@ -16,6 +16,7 @@ interface Args {
   maxTurns: number;
   role: string;
   costCeiling?: number;
+  editorState?: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -39,6 +40,7 @@ function parseArgs(argv: string[]): Args {
     maxTurns: Number(get("--max-turns", "50")),
     role: get("--role", "coder"),
     costCeiling: ceilingRaw !== undefined ? Number(ceilingRaw) : undefined,
+    editorState: getOpt("--editor-state"),
   };
 }
 
@@ -59,6 +61,10 @@ async function main(): Promise<void> {
     ? new TaskGraph(JSON.parse(readFileSync(args.graph, "utf8")) as TaskNode[])
     : new TaskGraph([{ id: "n1", role: args.role as never, goal: args.goal as string, dependsOn: [] }]);
 
+  const editorState = args.editorState
+    ? (JSON.parse(readFileSync(args.editorState, "utf8")) as import("@agent-team/core").EditorState)
+    : undefined;
+
   const rl = createInterface({ input: stdin, output: stdout });
   const host = composeHeadless({
     repoRoot: args.repo,
@@ -68,6 +74,7 @@ async function main(): Promise<void> {
     maxTurns: args.maxTurns,
     permTimeoutMs: 60_000,
     costCeilingUsd: args.costCeiling,
+    editorState,
     onGate: async (req: ActionRequestEvent) => {
       const ans = await rl.question(`GATE [${req.category}] ${req.summary} — allow? [y/N] `);
       return ans.trim().toLowerCase() === "y";
