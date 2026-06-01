@@ -15,3 +15,4 @@ export * from "./context-envelope.js";
 export * from "./worktree.js";
 export * from "./integration.js";
 export * from "./ambient.js";
+export * from "./embedder.js";
