@@ -61,13 +61,36 @@ export interface ErrorEvent {
   message: string;
 }
 
+/** Why an ambient reaction fired. `commit` is the only reason this milestone. */
+export interface AmbientTrigger {
+  reason: "commit";
+  /** The reviewed commit. */
+  commitSha: string;
+  /** Repo-relative changed files in that commit. */
+  scope: string[];
+}
+
+/**
+ * An ambient agent's finding header. Proposed code changes do NOT ride this
+ * event — they flow as `file_change` events during the run. `branch` is the
+ * proposal branch, present iff a diff was staged.
+ */
+export interface AmbientReportEvent {
+  kind: "ambient_report";
+  from: AgentId;
+  trigger: AmbientTrigger;
+  summary: string;
+  branch?: string;
+}
+
 export type AgentEvent =
   | MessageEvent
   | ToolCallEvent
   | FileChangeEvent
   | ActionRequestEvent
   | DoneEvent
-  | ErrorEvent;
+  | ErrorEvent
+  | AmbientReportEvent;
 
 /** Transport metadata stamped by the bus on publish. */
 export interface EventMeta {
