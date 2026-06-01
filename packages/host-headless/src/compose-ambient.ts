@@ -7,6 +7,7 @@ import {
   AmbientIntegration,
   Scheduler,
   TaskGraph,
+  HashEmbedder,
 } from "@agent-team/core";
 import type {
   TaskNode,
@@ -19,8 +20,11 @@ import type {
   AgentAdapter,
   AmbientTrigger,
   ScheduleResult,
+  ContextProvider,
+  Embedder,
 } from "@agent-team/core";
-import { NodeGitRunner } from "@agent-team/core/node";
+import { NodeGitRunner, SqliteVecContextProvider } from "@agent-team/core/node";
+import type { DecisionRecorder } from "@agent-team/core/node";
 import {
   ClaudeAdapter,
   PendingPermissions,
@@ -35,6 +39,10 @@ export interface AmbientOptions {
   maxTurns: number;
   permTimeoutMs: number;
   git?: GitRunner;
+  /** Path to the shared-memory sqlite-vec db. Absent ⇒ no shared memory (today's behavior). */
+  memoryDb?: string;
+  /** Embedder for shared memory. Defaults to HashEmbedder (offline). */
+  embedder?: Embedder;
 }
 
 export interface AmbientHost {
@@ -42,6 +50,8 @@ export interface AmbientHost {
   ledger: CostLedger;
   /** Run one ambient reaction for a trigger; resolves after the report is posted. */
   fire(trigger: AmbientTrigger): Promise<ScheduleResult>;
+  /** Release the shared-memory db handle (no-op when --memory is off). */
+  close(): void;
 }
 
 function reviewGoal(trigger: AmbientTrigger): string {
@@ -74,6 +84,35 @@ export function composeAmbient(opts: AmbientOptions): AmbientHost {
     if (res.mode !== "GATE") pending.resolve(e.requestId, { behavior: "allow" });
   });
 
+  // Shared memory: one provider serves both ports — hydrate (the reviewer reads
+  // prior findings about the same files at worktree creation) and record (each
+  // ambient_report finding is persisted for future reactions). Absent ⇒ Noop.
+  let memory: SqliteVecContextProvider | undefined;
+  let recorder: DecisionRecorder | undefined;
+  let contextProvider: ContextProvider = new NoopContextProvider();
+  if (opts.memoryDb) {
+    memory = new SqliteVecContextProvider({
+      dbPath: opts.memoryDb,
+      embedder: opts.embedder ?? new HashEmbedder(),
+    });
+    recorder = memory;
+    contextProvider = memory;
+  }
+
+  if (recorder) {
+    const rec = recorder;
+    bus.subscribe((e: BusEvent) => {
+      if (e.kind !== "ambient_report") return;
+      void rec.record({
+        id: e.trigger.commitSha.slice(0, 7),
+        role: "reviewer",
+        goal: reviewGoal(e.trigger),
+        summary: e.summary,
+        createdAt: new Date().toISOString(),
+      });
+    });
+  }
+
   const adapterFor = (_node: TaskNode): AgentAdapter =>
     new ClaudeAdapter({
       query: opts.query,
@@ -101,7 +140,7 @@ export function composeAmbient(opts: AmbientOptions): AmbientHost {
     const graph = new TaskGraph([
       { id: sha7, role: "reviewer", goal: reviewGoal(trigger), dependsOn: [] },
     ]);
-    const worktrees = new WorktreeManager(git, opts.repoRoot, new NoopContextProvider());
+    const worktrees = new WorktreeManager(git, opts.repoRoot, contextProvider);
     const integration = new AmbientIntegration();
     const scheduler = new Scheduler({
       bus,
@@ -126,5 +165,5 @@ export function composeAmbient(opts: AmbientOptions): AmbientHost {
     return result;
   }
 
-  return { bus, ledger, fire };
+  return { bus, ledger, fire, close: () => memory?.close() };
 }

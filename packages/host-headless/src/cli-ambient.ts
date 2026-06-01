@@ -12,6 +12,7 @@ interface Args {
   model: string;
   maxTurns: number;
   once?: string;
+  memory?: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -24,6 +25,7 @@ function parseArgs(argv: string[]): Args {
     model: getOpt("--model") ?? "claude-opus-4-8",
     maxTurns: Number(getOpt("--max-turns") ?? "50"),
     once: getOpt("--once"),
+    memory: getOpt("--memory"),
   };
 }
 
@@ -50,6 +52,7 @@ async function main(): Promise<void> {
     maxTurns: args.maxTurns,
     permTimeoutMs: 60_000,
     git,
+    memoryDb: args.memory,
   });
   host.bus.subscribe(printFeed);
 
@@ -58,6 +61,7 @@ async function main(): Promise<void> {
     const scope = await changedFiles(git, args.repo, sha);
     const trigger: AmbientTrigger = { reason: "commit", commitSha: sha, scope };
     await host.fire(trigger);
+    host.close();
     return;
   }
 
@@ -68,7 +72,7 @@ async function main(): Promise<void> {
   watcher.start();
   stdout.write(`agent-team-ambient watching ${args.repo} — commit to trigger a review (Ctrl-C to stop)\n`);
   await new Promise<void>((resolve) => {
-    process.on("SIGINT", () => { watcher.stop(); resolve(); });
+    process.on("SIGINT", () => { watcher.stop(); host.close(); resolve(); });
   });
 }
 
