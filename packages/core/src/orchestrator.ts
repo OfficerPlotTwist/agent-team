@@ -4,7 +4,7 @@ import { makeAgentId, roleOf } from "./events.js";
 import { MessageBus } from "./bus.js";
 import type { TaskGraph, TaskNode } from "./task-graph.js";
 import type { WorktreeManager } from "./worktree.js";
-import type { IntegrationCoordinator } from "./integration.js";
+import type { IntegrationLike } from "./integration.js";
 
 export interface SpecialistSpec {
   role: Role;
@@ -86,7 +86,7 @@ export interface SchedulerDeps {
   budget: Budget;
   graph: TaskGraph;
   worktrees: WorktreeManager;
-  integration: IntegrationCoordinator;
+  integration: IntegrationLike;
   /** Ref the integration branch + first worktrees are cut from (workspace HEAD). */
   baseRef: string;
 }

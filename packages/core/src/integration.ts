@@ -7,7 +7,17 @@ export type IntegrationOutcome =
   | { status: "merged" }
   | { status: "conflict"; requestId: string; conflicts: string[] };
 
-export class IntegrationCoordinator {
+/**
+ * The surface the Scheduler depends on. `IntegrationCoordinator` is the real
+ * (merging) implementation; `AmbientIntegration` is a stage-only one.
+ */
+export interface IntegrationLike {
+  init(baseRef: string): Promise<void>;
+  tip(): string;
+  integrate(authorId: AgentId, branch: string): Promise<IntegrationOutcome>;
+}
+
+export class IntegrationCoordinator implements IntegrationLike {
   readonly branch = "agentteam/integration";
   private readonly worktreePath: string;
   private queue: Promise<unknown> = Promise.resolve();
