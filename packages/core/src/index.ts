@@ -16,3 +16,4 @@ export * from "./worktree.js";
 export * from "./integration.js";
 export * from "./ambient.js";
 export * from "./embedder.js";
+export * from "./composite-context-provider.js";
