@@ -74,20 +74,23 @@ export class SqliteVecContextProvider implements ContextProvider, DecisionRecord
 
   async record(d: RecordedDecision): Promise<void> {
     try {
-      const vec = await this.embedder.embed(d.goal);
-      // Insert into decisions first; auto-rowid in vec_decisions will align
-      // because both tables are append-only (sqlite-vec v0.1.9 rejects explicit
-      // rowid inserts via the virtual table handler — use auto-assign instead).
-      this.db
-        .prepare(
-          "INSERT INTO decisions(node_id, role, goal, summary, created_at) VALUES (?, ?, ?, ?, ?)",
-        )
-        .run(d.id, d.role, d.goal, d.summary, d.createdAt);
-      this.db
-        .prepare("INSERT INTO vec_decisions(embedding) VALUES (?)")
-        .run(Buffer.from(vec.buffer));
+      const vec = await this.embedder.embed(`${d.goal}\n${d.summary}`);
+      // sqlite-vec v0.1.9 rejects explicit rowid binding, so vec_decisions uses
+      // auto-rowid. The transaction makes the decisions + vec_decisions inserts
+      // atomic, keeping their rowids in 1:1 lockstep (the hydrate JOIN relies on
+      // decisions.rowid == vec_decisions.rowid).
+      this.db.transaction(() => {
+        this.db
+          .prepare(
+            "INSERT INTO decisions(node_id, role, goal, summary, created_at) VALUES (?, ?, ?, ?, ?)",
+          )
+          .run(d.id, d.role, d.goal, d.summary, d.createdAt);
+        this.db.prepare("INSERT INTO vec_decisions(embedding) VALUES (?)").run(vec);
+      })();
     } catch {
-      // persisting one memory must never crash a completed run
+      // persisting one memory must never crash a completed run; warn so a failed
+      // insert (which would otherwise silently desync the store) is visible.
+      console.warn(`[shared-memory] failed to record decision ${d.id}`);
     }
   }
 

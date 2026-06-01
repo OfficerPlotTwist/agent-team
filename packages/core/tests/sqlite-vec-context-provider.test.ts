@@ -21,16 +21,16 @@ describe("SqliteVecContextProvider (offline)", () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
   it("records decisions and hydrates the closest as a gitignored file", async () => {
-    const p = new SqliteVecContextProvider({ dbPath, embedder: new HashEmbedder(64), k: 1 });
-    await p.record({ id: "auth1", role: "coder", goal: "implement login authentication", summary: "added JWT auth", createdAt: "2026-06-01T00:00:00Z" });
-    await p.record({ id: "css1", role: "coder", goal: "style the landing page", summary: "tuned the gradient", createdAt: "2026-06-01T00:01:00Z" });
+    const p = new SqliteVecContextProvider({ dbPath, embedder: new HashEmbedder(256), k: 1 });
+    await p.record({ id: "auth1", role: "coder", goal: "implement user login authentication", summary: "added JWT bearer token session validation", createdAt: "2026-06-01T00:00:00Z" });
+    await p.record({ id: "css1", role: "coder", goal: "redesign marketing homepage layout", summary: "switched hero section to flexbox grid spacing", createdAt: "2026-06-01T00:01:00Z" });
 
-    await p.hydrate(node("fix the login authentication bug"), wt);
+    await p.hydrate(node("fix the user login authentication session bug"), wt);
 
     const authFile = join(wt, ".agent-team", "memory-auth1.md");
     const cssFile = join(wt, ".agent-team", "memory-css1.md");
     expect(existsSync(authFile)).toBe(true);
-    expect(readFileSync(authFile, "utf8")).toContain("added JWT auth");
+    expect(readFileSync(authFile, "utf8")).toContain("added JWT bearer token session validation");
     // k=1 ⇒ only the closest hit is written, not the unrelated css decision.
     expect(existsSync(cssFile)).toBe(false);
     p.close();
