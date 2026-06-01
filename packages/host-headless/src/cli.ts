@@ -17,6 +17,7 @@ interface Args {
   role: string;
   costCeiling?: number;
   editorState?: string;
+  memory?: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -41,6 +42,7 @@ function parseArgs(argv: string[]): Args {
     role: get("--role", "coder"),
     costCeiling: ceilingRaw !== undefined ? Number(ceilingRaw) : undefined,
     editorState: getOpt("--editor-state"),
+    memory: getOpt("--memory"),
   };
 }
 
@@ -75,6 +77,7 @@ async function main(): Promise<void> {
     permTimeoutMs: 60_000,
     costCeilingUsd: args.costCeiling,
     editorState,
+    memoryDb: args.memory,
     onGate: async (req: ActionRequestEvent) => {
       const ans = await rl.question(`GATE [${req.category}] ${req.summary} — allow? [y/N] `);
       return ans.trim().toLowerCase() === "y";
@@ -91,6 +94,7 @@ async function main(): Promise<void> {
   });
 
   const result = await host.run();
+  host.close();
   rl.close();
   stdout.write(`\nstatus: ${result.status}\n`);
   stdout.write(`completed: ${result.completed.join(", ") || "(none)"}\n`);

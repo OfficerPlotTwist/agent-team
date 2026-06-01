@@ -19,6 +19,10 @@ import type {
   AgentAdapter,
 } from "@agent-team/core";
 import { NodeGitRunner, TextContextProvider } from "@agent-team/core/node";
+import { SqliteVecContextProvider } from "@agent-team/core/node";
+import type { DecisionRecorder } from "@agent-team/core/node";
+import { CompositeContextProvider, HashEmbedder } from "@agent-team/core";
+import type { ContextProvider, Embedder } from "@agent-team/core";
 import {
   ClaudeAdapter,
   PendingPermissions,
@@ -43,6 +47,10 @@ export interface ComposeOptions {
   git?: GitRunner;
   /** Optional static editor state (offline driver for the S3 hydrate seam). */
   editorState?: import("@agent-team/core").EditorState;
+  /** Path to the shared-memory sqlite-vec db. Absent ⇒ no shared memory (today's behavior). */
+  memoryDb?: string;
+  /** Embedder for shared memory. Defaults to HashEmbedder (offline). */
+  embedder?: Embedder;
 }
 
 export interface ComposedHost {
@@ -52,6 +60,7 @@ export interface ComposedHost {
   pending: PendingPermissions;
   baseRef: string;
   run(): Promise<import("@agent-team/core").ScheduleResult>;
+  close(): void;
 }
 
 const BASE_REF = "agentteam/integration";
@@ -92,11 +101,40 @@ export function composeHeadless(opts: ComposeOptions): ComposedHost {
     }
   });
 
+  let memory: SqliteVecContextProvider | undefined;
+  let recorder: DecisionRecorder | undefined;
+  let contextProvider: ContextProvider = new TextContextProvider();
+  if (opts.memoryDb) {
+    memory = new SqliteVecContextProvider({
+      dbPath: opts.memoryDb,
+      embedder: opts.embedder ?? new HashEmbedder(),
+    });
+    recorder = memory;
+    contextProvider = new CompositeContextProvider([new TextContextProvider(), memory]);
+  }
+
+  if (recorder) {
+    const rec = recorder;
+    bus.subscribe((e: BusEvent) => {
+      if (e.kind !== "done") return;
+      const id = e.from.slice(e.from.indexOf("#") + 1); // from === `${role}#${id}`
+      const node = opts.graph.get(id);
+      if (!node) return;
+      void rec.record({
+        id: node.id,
+        role: node.role,
+        goal: node.goal,
+        summary: e.summary,
+        createdAt: new Date().toISOString(),
+      });
+    });
+  }
+
   const contextModalities = ["text"] as const;
   const worktrees = new WorktreeManager(
     git,
     opts.repoRoot,
-    new TextContextProvider(),
+    contextProvider,
     () => ({
       envelope: opts.editorState ? { editor: opts.editorState } : undefined,
       modality: pickModality(contextModalities),
@@ -134,5 +172,6 @@ export function composeHeadless(opts: ComposeOptions): ComposedHost {
     pending,
     baseRef: BASE_REF,
     run: () => scheduler.run(adapterFor),
+    close: () => memory?.close(),
   };
 }
