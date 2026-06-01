@@ -72,6 +72,11 @@ export class TaskGraph {
     return [...this.nodes.keys()];
   }
 
+  /** Look up a node by id (read-only; undefined if absent). */
+  get(id: string): TaskNode | undefined {
+    return this.nodes.get(id);
+  }
+
   completedIds(): string[] {
     return [...this.completed];
   }

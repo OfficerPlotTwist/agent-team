@@ -72,3 +72,15 @@ describe("TaskGraph scheduling", () => {
     expect(() => g.complete("x")).toThrow(/unknown/i);
   });
 });
+
+describe("TaskGraph.get", () => {
+  it("returns the node by id and undefined for unknown ids", () => {
+    const g = new TaskGraph([
+      { id: "a", role: "coder", goal: "build the thing", dependsOn: [] },
+      { id: "b", role: "reviewer", goal: "review the thing", dependsOn: ["a"] },
+    ]);
+    expect(g.get("a")?.goal).toBe("build the thing");
+    expect(g.get("b")?.role).toBe("reviewer");
+    expect(g.get("missing")).toBeUndefined();
+  });
+});
