@@ -22,8 +22,9 @@ export interface ProposalCoordinatorOptions {
 }
 
 /**
- * Lists / diffs / accepts / rejects the proposal branches S4 ambient agents
- * stage. Pure: depends only on the GitRunner port (+ repoRoot), so it carries
+ * Lists / diffs / rejects the proposal branches S4 ambient agents stage
+ * (accept arrives in a later task). Pure: depends only on the GitRunner port
+ * (+ repoRoot), so it carries
  * no node:* and is exported from the pure barrel beside IntegrationCoordinator.
  */
 export class ProposalCoordinator {
@@ -72,7 +73,12 @@ export class ProposalCoordinator {
   }
 
   private async resolveReviewedSha(sha7: string): Promise<string> {
-    return (await this.git.run(["rev-parse", sha7], this.repoRoot)).stdout.trim();
+    // Throw on a failed rev-parse: an empty sha would silently degrade the
+    // `<reviewedSha>..<branch>` ranges below to `HEAD..<branch>` (a wrong answer
+    // with no error). A clear throw beats a misleading count/diff.
+    const res = await this.git.run(["rev-parse", sha7], this.repoRoot);
+    if (res.code !== 0) throw new Error(`rev-parse ${sha7} failed: ${res.stderr.trim()}`);
+    return res.stdout.trim();
   }
 
   private async commitCount(reviewedSha: string, branch: string): Promise<number> {
