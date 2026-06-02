@@ -4,7 +4,8 @@
   "type": "module",
   "bin": {
     "agent-team-run": "./dist/cli.js",
-    "agent-team-ambient": "./dist/cli-ambient.js"
+    "agent-team-ambient": "./dist/cli-ambient.js",
+    "agent-team-proposals": "./dist/cli-proposals.js"
   },
   "files": ["dist"],
   "scripts": {
