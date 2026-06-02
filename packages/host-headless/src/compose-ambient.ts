@@ -158,12 +158,15 @@ export function composeAmbient(opts: AmbientOptions): AmbientHost {
     // proposals CLI can read it from git alone. The agent's worktree is already
     // removed, so amend through a throwaway worktree. Single-line the summary
     // (trailers are one line). Best-effort: a failed amend must not fail the run.
-    if (sawFileChange && doneSummary) {
+    const finding = doneSummary.replace(/\s+/g, " ").trim();
+    if (sawFileChange && finding) {
       const tmp = `${opts.repoRoot}/.worktrees/proposal-finding-${sha7}`;
-      const value = doneSummary.replace(/\s+/g, " ").trim();
       const added = await git.run(["worktree", "add", "--force", tmp, branch], opts.repoRoot);
       if (added.code === 0) {
-        await git.run(["commit", "--amend", "--no-edit", "--trailer", `Ambient-Finding: ${value}`], tmp);
+        const amended = await git.run(["commit", "--amend", "--no-edit", "--trailer", `Ambient-Finding: ${finding}`], tmp);
+        if (amended.code !== 0) {
+          console.warn(`[composeAmbient] finding-trailer amend failed (${amended.code}): ${amended.stderr.trim()}`);
+        }
         await git.run(["worktree", "remove", "--force", tmp], opts.repoRoot);
       }
     }
