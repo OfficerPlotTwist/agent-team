@@ -68,6 +68,16 @@ describe("ProposalCoordinator list/diff/reject", () => {
     const coord = new ProposalCoordinator({ git, repoRoot: repo });
     expect(await coord.list()).toEqual([]);
   });
+
+  it("skips a malformed proposal branch instead of poisoning the whole listing", async () => {
+    // A branch whose suffix isn't a resolvable sha (manual/corrupt). rev-parse of
+    // the suffix fails — list() must skip it and still return the valid proposal.
+    await git.run(["branch", "agentteam/reviewer-zzzzzzz", "main"], repo);
+    const coord = new ProposalCoordinator({ git, repoRoot: repo });
+    const proposals = await coord.list();
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0].branch).toBe(`agentteam/reviewer-${sha7}`);
+  });
 });
 
 describe("ProposalCoordinator accept", () => {

@@ -168,6 +168,8 @@ export function composeAmbient(opts: AmbientOptions): AmbientHost {
           console.warn(`[composeAmbient] finding-trailer amend failed (${amended.code}): ${amended.stderr.trim()}`);
         }
         await git.run(["worktree", "remove", "--force", tmp], opts.repoRoot);
+      } else {
+        console.warn(`[composeAmbient] finding-trailer worktree add failed (${added.code}): ${added.stderr.trim()}`);
       }
     }
 

@@ -32,6 +32,7 @@ export class ProposalCoordinator {
   private readonly repoRoot: string;
   private readonly prefix: string;
   private readonly trailer: string;
+  private acceptSeq = 0;
 
   constructor(opts: ProposalCoordinatorOptions) {
     this.git = opts.git;
@@ -48,16 +49,24 @@ export class ProposalCoordinator {
     const branches = res.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
     const out: AmbientProposal[] = [];
     for (const branch of branches) {
-      const sha7 = branch.slice(this.prefix.length);
-      const reviewedSha = await this.resolveReviewedSha(sha7);
-      const commitCount = await this.commitCount(reviewedSha, branch);
-      const finding = (
-        await this.git.run(
-          ["show", "-s", `--format=%(trailers:key=${this.trailer},valueonly)`, branch],
-          this.repoRoot,
-        )
-      ).stdout.trim();
-      out.push({ branch, sha7, reviewedSha, finding, commitCount });
+      try {
+        const sha7 = branch.slice(this.prefix.length);
+        const reviewedSha = await this.resolveReviewedSha(sha7);
+        const commitCount = await this.commitCount(reviewedSha, branch);
+        const finding = (
+          await this.git.run(
+            ["show", "-s", `--format=%(trailers:key=${this.trailer},valueonly)`, branch],
+            this.repoRoot,
+          )
+        ).stdout.trim();
+        out.push({ branch, sha7, reviewedSha, finding, commitCount });
+      } catch {
+        // A branch whose suffix isn't a resolvable sha (manual/corrupt) must not
+        // poison the whole survey — skip it. diff()/accept() stay strict (they
+        // operate on one named branch the caller chose, where a silent wrong
+        // answer would be worse than a thrown error).
+        continue;
+      }
     }
     return out;
   }
@@ -89,7 +98,9 @@ export class ProposalCoordinator {
     // --onto path: merge inside a throwaway worktree so HEAD/working tree are untouched.
     // The temp path is keyed by branch only, so two concurrent accepts of the same
     // branch would collide — ambient reactions are processed serially, so that's safe.
-    const tmp = `${this.repoRoot}/.worktrees/proposal-accept-${branch.slice(this.prefix.length)}`;
+    // The per-instance counter makes the temp path unique so two accepts in the
+    // same process (even of the same branch) can't collide on it.
+    const tmp = `${this.repoRoot}/.worktrees/proposal-accept-${branch.slice(this.prefix.length)}-${++this.acceptSeq}`;
     const added = await this.git.run(["worktree", "add", "--force", tmp, target], this.repoRoot);
     if (added.code !== 0) {
       throw new Error(`git worktree add failed for ${target}: ${added.stderr.trim()}`);
