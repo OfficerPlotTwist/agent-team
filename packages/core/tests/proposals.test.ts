@@ -69,3 +69,60 @@ describe("ProposalCoordinator list/diff/reject", () => {
     expect(await coord.list()).toEqual([]);
   });
 });
+
+describe("ProposalCoordinator accept", () => {
+  it("clean-merges the proposal into the current branch (HEAD advances)", async () => {
+    const { repo, sha7 } = await makeRepoWithProposal();
+    const before = (await git.run(["rev-parse", "main"], repo)).stdout.trim();
+    const coord = new ProposalCoordinator({ git, repoRoot: repo });
+    const r = await coord.accept(`agentteam/reviewer-${sha7}`);
+    expect(r.status).toBe("merged");
+    const after = (await git.run(["rev-parse", "main"], repo)).stdout.trim();
+    expect(after).not.toBe(before); // --no-ff merge commit landed
+    const headFile = (await git.run(["show", "main:app.ts"], repo)).stdout;
+    expect(headFile).toContain("const enum X");
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("reports conflict and aborts (tree clean) when the target diverged", async () => {
+    const { repo, sha7 } = await makeRepoWithProposal();
+    writeFileSync(join(repo, "app.ts"), "export const x = 99; // human edit\n");
+    await git.run(["commit", "-am", "chore: bump x to 99"], repo);
+    const coord = new ProposalCoordinator({ git, repoRoot: repo });
+    const r = await coord.accept(`agentteam/reviewer-${sha7}`);
+    expect(r.status).toBe("conflict");
+    if (r.status === "conflict") expect(r.files).toContain("app.ts");
+    const mh = await git.run(["rev-parse", "--verify", "MERGE_HEAD"], repo);
+    expect(mh.code).not.toBe(0);
+    const unmerged = (await git.run(["diff", "--name-only", "--diff-filter=U"], repo)).stdout.trim();
+    expect(unmerged).toBe("");
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("returns 'nothing' for an empty proposal (no commits beyond reviewed)", async () => {
+    const { repo, sha7 } = await makeRepoWithProposal();
+    const branch = `agentteam/reviewer-${sha7}`;
+    const reviewedSha = (await git.run(["rev-parse", sha7], repo)).stdout.trim();
+    await git.run(["branch", "-f", branch, reviewedSha], repo);
+    const coord = new ProposalCoordinator({ git, repoRoot: repo });
+    const r = await coord.accept(branch);
+    expect(r.status).toBe("nothing");
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("--onto merges into another branch via a throwaway worktree, leaving HEAD untouched", async () => {
+    const { repo, sha7 } = await makeRepoWithProposal();
+    const reviewedSha = (await git.run(["rev-parse", sha7], repo)).stdout.trim();
+    await git.run(["branch", "land", reviewedSha], repo);
+    const headBefore = (await git.run(["rev-parse", "main"], repo)).stdout.trim();
+    const coord = new ProposalCoordinator({ git, repoRoot: repo });
+    const r = await coord.accept(`agentteam/reviewer-${sha7}`, "land");
+    expect(r.status).toBe("merged");
+    if (r.status === "merged") expect(r.onto).toBe("land");
+    expect((await git.run(["rev-parse", "land"], repo)).stdout.trim()).not.toBe(reviewedSha);
+    expect((await git.run(["rev-parse", "main"], repo)).stdout.trim()).toBe(headBefore);
+    const wt = (await git.run(["worktree", "list"], repo)).stdout;
+    expect(wt).not.toContain("proposal-accept");
+    rmSync(repo, { recursive: true, force: true });
+  });
+});

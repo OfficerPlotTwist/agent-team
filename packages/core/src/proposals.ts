@@ -72,6 +72,40 @@ export class ProposalCoordinator {
     await this.git.run(["worktree", "prune"], this.repoRoot);
   }
 
+  async accept(branch: string, onto?: string): Promise<AcceptOutcome> {
+    const current = (
+      await this.git.run(["rev-parse", "--abbrev-ref", "HEAD"], this.repoRoot)
+    ).stdout.trim();
+    const target = onto ?? current;
+    const reviewedSha = await this.resolveReviewedSha(branch.slice(this.prefix.length));
+    if ((await this.commitCount(reviewedSha, branch)) === 0) {
+      return { status: "nothing", branch };
+    }
+
+    if (target === current) {
+      return this.mergeIn(this.repoRoot, branch, target);
+    }
+
+    // --onto path: merge inside a throwaway worktree so HEAD/working tree are untouched.
+    const tmp = `${this.repoRoot}/.worktrees/proposal-accept-${branch.slice(this.prefix.length)}`;
+    await this.git.run(["worktree", "add", "--force", tmp, target], this.repoRoot);
+    try {
+      return await this.mergeIn(tmp, branch, target);
+    } finally {
+      await this.git.run(["worktree", "remove", "--force", tmp], this.repoRoot);
+    }
+  }
+
+  private async mergeIn(cwd: string, branch: string, onto: string): Promise<AcceptOutcome> {
+    const m = await this.git.run(["merge", "--no-ff", branch], cwd);
+    if (m.code === 0) return { status: "merged", branch, onto };
+    const files = (
+      await this.git.run(["diff", "--name-only", "--diff-filter=U"], cwd)
+    ).stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+    await this.git.run(["merge", "--abort"], cwd);
+    return { status: "conflict", branch, onto, files };
+  }
+
   private async resolveReviewedSha(sha7: string): Promise<string> {
     // Throw on a failed rev-parse: an empty sha would silently degrade the
     // `<reviewedSha>..<branch>` ranges below to `HEAD..<branch>` (a wrong answer
