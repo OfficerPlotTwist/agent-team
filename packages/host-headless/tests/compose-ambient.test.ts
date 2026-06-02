@@ -97,4 +97,21 @@ describe("composeAmbient (offline)", () => {
       expect(onBranch.stdout.trim()).toBe(sha); // empty branch == base, no proposal commit
     }
   });
+
+  it("writes the reviewer finding as an Ambient-Finding trailer on the proposal commit", async () => {
+    const sha = await headSha(git, repo);
+    const sha7 = sha.slice(0, 7);
+    const query: QueryFn = async function* ({ options }) {
+      writeFileSync(join(options.cwd as string, "app.ts"), "export const x = 2; // reviewed\n");
+      yield asMsg({ type: "result", subtype: "success", is_error: false, result: "x should be a const enum for clarity", total_cost_usd: 0.01 });
+    };
+    const host = composeAmbient({ repoRoot: repo, query, model: "claude-test", maxTurns: 50, permTimeoutMs: 1000 });
+    await host.fire({ reason: "commit", commitSha: sha, scope: ["app.ts"] });
+
+    const trailer = await git.run(
+      ["show", "-s", "--format=%(trailers:key=Ambient-Finding,valueonly)", `agentteam/reviewer-${sha7}`],
+      repo,
+    );
+    expect(trailer.stdout.trim()).toBe("x should be a const enum for clarity");
+  });
 });

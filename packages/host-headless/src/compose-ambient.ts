@@ -154,6 +154,20 @@ export function composeAmbient(opts: AmbientOptions): AmbientHost {
     const result = await scheduler.run(adapterFor);
     off();
 
+    // Persist the reviewer's finding onto the proposal commit as a trailer so the
+    // proposals CLI can read it from git alone. The agent's worktree is already
+    // removed, so amend through a throwaway worktree. Single-line the summary
+    // (trailers are one line). Best-effort: a failed amend must not fail the run.
+    if (sawFileChange && doneSummary) {
+      const tmp = `${opts.repoRoot}/.worktrees/proposal-finding-${sha7}`;
+      const value = doneSummary.replace(/\s+/g, " ").trim();
+      const added = await git.run(["worktree", "add", "--force", tmp, branch], opts.repoRoot);
+      if (added.code === 0) {
+        await git.run(["commit", "--amend", "--no-edit", "--trailer", `Ambient-Finding: ${value}`], tmp);
+        await git.run(["worktree", "remove", "--force", tmp], opts.repoRoot);
+      }
+    }
+
     bus.publish({
       kind: "ambient_report",
       from: agentId,
