@@ -31,6 +31,11 @@
 
 ## Task 1: Core `ProposalCoordinator` — list / diff / reject
 
+> **As-built note:** the result interface is named **`AmbientProposal`** (not
+> `Proposal`) in every code block of this task — `diff-store.ts` already exports a
+> `Proposal`, which collides on the barrel re-export (TS2308). Read `Proposal` →
+> `AmbientProposal` throughout Tasks 1–2.
+
 **Files:**
 - Create: `packages/core/src/proposals.ts`
 - Modify: `packages/core/src/index.ts`

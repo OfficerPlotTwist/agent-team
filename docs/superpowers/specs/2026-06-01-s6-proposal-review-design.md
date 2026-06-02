@@ -86,11 +86,16 @@ and batch accept are all **out of scope** (§8).
 
 ### 4.1 Core types + coordinator (`packages/core/src/proposals.ts`)
 
+> **Implementation note (rename):** the result type below is named `Proposal` in
+> this spec, but ships as **`AmbientProposal`** — `packages/core/src/diff-store.ts`
+> already exports an unrelated `Proposal`, so re-exporting both from the barrel is
+> a TS2308 ambiguity. The public method signatures are otherwise as written.
+
 ```ts
 import type { GitRunner } from "./git.js";
 
 /** One staged ambient proposal, derived entirely from git. */
-export interface Proposal {
+export interface AmbientProposal {
   branch: string;        // e.g. "agentteam/reviewer-1a2b3c4"
   sha7: string;          // reviewed commit short sha (from the branch name)
   reviewedSha: string;   // full sha the branch was cut from (the trigger commit)
@@ -112,7 +117,7 @@ export interface ProposalCoordinatorOptions {
 
 export class ProposalCoordinator {
   constructor(opts: ProposalCoordinatorOptions);
-  list(): Promise<Proposal[]>;
+  list(): Promise<AmbientProposal[]>;
   diff(branch: string): Promise<string>;
   accept(branch: string, onto?: string): Promise<AcceptOutcome>;
   reject(branch: string): Promise<void>;
