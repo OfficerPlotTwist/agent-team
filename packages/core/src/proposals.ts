@@ -87,8 +87,13 @@ export class ProposalCoordinator {
     }
 
     // --onto path: merge inside a throwaway worktree so HEAD/working tree are untouched.
+    // The temp path is keyed by branch only, so two concurrent accepts of the same
+    // branch would collide — ambient reactions are processed serially, so that's safe.
     const tmp = `${this.repoRoot}/.worktrees/proposal-accept-${branch.slice(this.prefix.length)}`;
-    await this.git.run(["worktree", "add", "--force", tmp, target], this.repoRoot);
+    const added = await this.git.run(["worktree", "add", "--force", tmp, target], this.repoRoot);
+    if (added.code !== 0) {
+      throw new Error(`git worktree add failed for ${target}: ${added.stderr.trim()}`);
+    }
     try {
       return await this.mergeIn(tmp, branch, target);
     } finally {
@@ -102,7 +107,10 @@ export class ProposalCoordinator {
     const files = (
       await this.git.run(["diff", "--name-only", "--diff-filter=U"], cwd)
     ).stdout.split("\n").map((s) => s.trim()).filter(Boolean);
-    await this.git.run(["merge", "--abort"], cwd);
+    const abort = await this.git.run(["merge", "--abort"], cwd);
+    if (abort.code !== 0) {
+      throw new Error(`merge --abort failed in ${cwd}: ${abort.stderr.trim()}`);
+    }
     return { status: "conflict", branch, onto, files };
   }
 
