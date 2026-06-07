@@ -52,7 +52,7 @@ export function parseClientCommand(raw: unknown): ClientCommand | null {
     case "proposal_refresh":
       return { type: "proposal_refresh" };
     case "resume":
-      return typeof m.afterSeq === "number" && Number.isFinite(m.afterSeq)
+      return typeof m.afterSeq === "number" && Number.isInteger(m.afterSeq) && m.afterSeq >= 0
         ? { type: "resume", afterSeq: m.afterSeq }
         : null;
     default:
