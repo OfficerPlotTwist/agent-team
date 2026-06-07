@@ -132,6 +132,30 @@ describe("createControlServer", () => {
     expect(seen).toEqual([{ type: "proposal_show", branch: "x" }]);
   });
 
+  it("rejects a browser connection from a foreign origin (CSWSH guard)", async () => {
+    server = await createControlServer(baseOpts());
+    const evil = new WebSocket(`ws://127.0.0.1:${server.port()}/`, {
+      headers: { origin: "http://evil.example" },
+    });
+    sockets.push(evil);
+    let closeCode = 0;
+    evil.on("close", (code) => (closeCode = code));
+    await until(() => closeCode !== 0);
+    expect(closeCode).toBe(1008);
+  });
+
+  it("accepts a connection from its own origin", async () => {
+    server = await createControlServer(baseOpts());
+    const own = new WebSocket(`ws://127.0.0.1:${server.port()}/`, {
+      headers: { origin: `http://127.0.0.1:${server.port()}` },
+    });
+    const received: ServerEnvelope[] = [];
+    own.on("message", (d) => received.push(JSON.parse(String(d)) as ServerEnvelope));
+    sockets.push(own);
+    await until(() => received.length >= 1);
+    expect(received[0]).toMatchObject({ type: "hello" });
+  });
+
   it("notifies client connect/disconnect and emits heartbeat pings", async () => {
     let connects = 0;
     let disconnects = 0;

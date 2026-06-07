@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { extname, join, normalize } from "node:path";
+import { extname, join, normalize, sep } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { RingBuffer } from "./ring-buffer.js";
 import type { UnstampedBroadcast } from "./ring-buffer.js";
@@ -52,7 +52,7 @@ async function serveStatic(uiDist: string, req: IncomingMessage, res: ServerResp
   const urlPath = (req.url ?? "/").split("?")[0] ?? "/";
   const rel = urlPath === "/" ? "index.html" : urlPath.slice(1);
   const path = normalize(join(uiDist, rel));
-  if (!path.startsWith(normalize(uiDist))) {
+  if (!path.startsWith(normalize(uiDist) + sep)) {
     res.writeHead(403, { "content-type": "text/plain" });
     res.end("forbidden");
     return;
@@ -86,7 +86,17 @@ export function createControlServer(opts: ControlServerOptions): Promise<Control
     }
   }, opts.heartbeatMs ?? 15_000);
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    const origin = req.headers.origin;
+    const port = (http.address() as AddressInfo).port;
+    if (
+      origin !== undefined &&
+      origin !== `http://127.0.0.1:${port}` &&
+      origin !== `http://localhost:${port}`
+    ) {
+      ws.close(1008, "forbidden origin"); // CSWSH guard: browsers don't apply SOP to ws://
+      return;
+    }
     alive.set(ws, true);
     ws.on("pong", () => alive.set(ws, true));
     opts.onClientConnected?.();
@@ -116,7 +126,10 @@ export function createControlServer(opts: ControlServerOptions): Promise<Control
   });
 
   return new Promise((resolve, reject) => {
-    http.once("error", reject);
+    http.once("error", (err) => {
+      clearInterval(heartbeat);
+      reject(err);
+    });
     http.listen(opts.port ?? 7340, "127.0.0.1", () => {
       resolve({
         broadcast: (env) => {
