@@ -1,0 +1,37 @@
+:root {
+  --bg: #1e1e1e; --bg-alt: #252526; --fg: #cccccc; --accent: #4ec9b0;
+  --warn: #f44747; --ok: #6a9955; --border: #333333;
+  --feed-font: 14px "Segoe UI", system-ui, sans-serif; --feed-line: 20px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px "Segoe UI", system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+#connbar { padding: 2px 10px; font-size: 11px; flex: none; }
+#connbar.connected { background: #143d2e; color: var(--ok); }
+#connbar.reconnecting { background: #4d3800; color: #e5c07b; }
+#connbar.gapped { background: #4a1e1e; color: var(--warn); }
+main { flex: 1; display: flex; min-height: 0; }
+#left { flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border); }
+#gates { flex: none; }
+.gate { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #4d2b00; border-bottom: 2px solid var(--warn); }
+.gate .cat { color: var(--warn); font-weight: 700; text-transform: uppercase; font-size: 11px; }
+.gate .summary { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gate button { padding: 4px 14px; cursor: pointer; }
+#feed { flex: 1; overflow-y: auto; position: relative; }
+#spacer { position: absolute; top: 0; left: 0; width: 1px; }
+.row { position: absolute; left: 0; right: 0; padding: 0 16px; font: var(--feed-font); line-height: var(--feed-line); overflow: hidden; }
+.row.alt { background: var(--bg-alt); }
+.row.kind-error { color: var(--warn); }
+.row.kind-done { color: var(--ok); }
+.divider { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--warn); color: var(--warn); font-size: 11px; padding: 2px 16px; }
+#proposals { width: 380px; flex: none; display: flex; flex-direction: column; min-height: 0; }
+#proposals header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+#proposals h2 { margin: 0; font-size: 14px; color: var(--accent); }
+#proposal-list { overflow-y: auto; flex: none; max-height: 45%; }
+.proposal { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.proposal .branch { font-family: Consolas, monospace; font-size: 12px; color: var(--accent); cursor: pointer; }
+.proposal .finding { margin: 4px 0; }
+.proposal .actions button { margin-right: 6px; padding: 2px 10px; cursor: pointer; }
+.proposal .outcome { font-size: 11px; margin-top: 4px; }
+.proposal .outcome.ok { color: var(--ok); }
+.proposal .outcome.bad { color: var(--warn); }
+#proposal-diff { flex: 1; overflow: auto; margin: 0; padding: 8px 12px; font: 12px Consolas, monospace; background: #161616; border-top: 1px solid var(--border); }

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Team — Control Room</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="connbar" class="reconnecting">connecting…</div>
+  <main>
+    <section id="left">
+      <div id="gates"></div>
+      <div id="feed"><div id="spacer"></div></div>
+    </section>
+    <aside id="proposals">
+      <header>
+        <h2>Proposals</h2>
+        <button id="proposals-refresh" type="button">Refresh</button>
+      </header>
+      <div id="proposal-list"></div>
+      <pre id="proposal-diff" hidden></pre>
+    </aside>
+  </main>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>
