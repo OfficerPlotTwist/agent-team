@@ -168,4 +168,53 @@ describe("composeWeb offline integration", () => {
       received.some((e) => e.type === "proposals" && e.items.length === 0),
     );
   });
+
+  it("an unanswered gate denies in the UI at permTimeout; a late allow is ignored (no divergence)", async () => {
+    // Reproduces the cross-layer seam: the adapter's permTimeoutMs denies a gate
+    // independently. If the browser gate is never resolved+cleared, a late allow
+    // would broadcast gate_resolved:allowed while the action was already denied.
+    const query: QueryFn = async function* ({ options }) {
+      const canUseTool = (
+        options as {
+          canUseTool?: (n: string, i: Record<string, unknown>, o: never) => Promise<{ behavior: string }>;
+        }
+      ).canUseTool;
+      const decision = await canUseTool!("Bash", { command: "rm -rf ./scratch" }, {} as never);
+      if (decision.behavior === "allow") {
+        writeFileSync(join(options.cwd as string, "gated.txt"), "should NOT exist\n");
+      }
+      yield asMsg({ type: "result", subtype: "success", is_error: false, result: "done", total_cost_usd: 0 });
+    };
+    const graph = new TaskGraph([{ id: "n1", role: "coder", goal: "gated work", dependsOn: [] }]);
+    const host = await composeWeb({
+      repoRoot: repo, graph, query,
+      model: "claude-test", maxTurns: 50, permTimeoutMs: 400, port: 0,
+    });
+    closeHost = host.close;
+
+    const { ws, received } = connect(host.port());
+    sockets.push(ws);
+    await until(() => received.some((e) => e.type === "hello"));
+
+    const runP = host.run();
+    await until(() => received.some((e) => e.type === "gate"));
+    const gate = received.find((e) => e.type === "gate") as Extract<ServerEnvelope, { type: "gate" }>;
+    // Deliberately do NOT answer — let the gate lapse past permTimeoutMs.
+
+    const result = await runP;
+    expect(result.status).toBe("complete");
+    // The browser must be told the gate was denied (UI matches the adapter decision).
+    await until(() =>
+      received.some((e) => e.type === "gate_resolved" && e.requestId === gate.requestId && e.allowed === false),
+    );
+
+    // A late allow arrives after the gate already resolved: it must be a no-op.
+    ws.send(JSON.stringify({ type: "allow", requestId: gate.requestId }));
+    await new Promise((r) => setTimeout(r, 150));
+    expect(
+      received.filter((e) => e.type === "gate_resolved" && e.requestId === gate.requestId && e.allowed === true),
+    ).toHaveLength(0);
+    const show = await git.run(["show", "agentteam/integration:gated.txt"], repo);
+    expect(show.code).not.toBe(0); // file never written — the deny stood
+  });
 });

@@ -149,7 +149,12 @@ export async function composeWeb(opts: ComposeWebOptions): Promise<ComposedWebHo
   const handlers: BrokerHandlers = {
     gate: (req: ActionRequestEvent, _from: AgentId) => {
       void gates
-        .askGate({ requestId: req.requestId, category: req.category, summary: req.summary })
+        .askGate({
+          requestId: req.requestId,
+          category: req.category,
+          summary: req.summary,
+          timeoutMs: req.timeoutMs,
+        })
         .then((allow) =>
           pending.resolve(
             req.requestId,
