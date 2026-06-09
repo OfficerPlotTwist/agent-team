@@ -1,0 +1,24 @@
+{
+  "name": "@agent-team/host-experiment",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/compose.js",
+  "bin": { "agent-team-experiment": "./dist/cli.js" },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-team/core": "*",
+    "@agent-team/adapters-claude": "*",
+    "@anthropic-ai/claude-agent-sdk": "0.3.154"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}
