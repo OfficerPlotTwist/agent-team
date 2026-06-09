@@ -86,6 +86,7 @@ export class ClaudeAdapter implements AgentAdapter {
     }
 
     this.deps.ledger.add(agentId, decision.costUsd);
+    this.deps.ledger.addUsage(agentId, { tokensIn: decision.tokensIn, tokensOut: decision.tokensOut });
     await this.commitAndEmit(ctx, agentId, decision.summary, emit);
   }
 

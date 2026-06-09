@@ -29,20 +29,39 @@ export function mapStreamMessage(msg: SDKMessage, agentId: AgentId): AgentEvent[
 }
 
 export type ResultDecision =
-  | { ok: true; summary: string; costUsd: number }
+  | { ok: true; summary: string; costUsd: number; tokensIn: number; tokensOut: number }
   | { ok: false; message: string };
 
-/** Pure: decide terminal outcome from a result message (no I/O). */
+/** Pure: decide terminal outcome from a result message (no I/O). Token usage
+ *  rides the same SDK result as cost; absent usage -> 0 (offline fakes).
+ *  `tokensIn` is the TOTAL input processed — fresh input + cache-read +
+ *  cache-creation — so cached runs are not under-counted. */
 export function interpretResult(msg: SDKMessage): ResultDecision {
   const m = msg as {
     type: string;
     subtype?: string;
     result?: string;
     total_cost_usd?: number;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
     errors?: string[];
   };
   if (m.subtype === "success") {
-    return { ok: true, summary: m.result ?? "", costUsd: m.total_cost_usd ?? 0 };
+    const u = m.usage;
+    return {
+      ok: true,
+      summary: m.result ?? "",
+      costUsd: m.total_cost_usd ?? 0,
+      tokensIn:
+        (u?.input_tokens ?? 0) +
+        (u?.cache_read_input_tokens ?? 0) +
+        (u?.cache_creation_input_tokens ?? 0),
+      tokensOut: u?.output_tokens ?? 0,
+    };
   }
   const message = (m.errors ?? [m.subtype ?? "unknown error"]).join("; ");
   return { ok: false, message };

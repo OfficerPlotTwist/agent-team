@@ -8,8 +8,15 @@ const assistantText = (text: string) =>
   asMsg({ type: "assistant", message: { content: [{ type: "text", text }] } });
 const assistantToolUse = (name: string, input: Record<string, unknown>) =>
   asMsg({ type: "assistant", message: { content: [{ type: "tool_use", id: "tu1", name, input }] } });
-const resultSuccess = (result: string, cost: number) =>
-  asMsg({ type: "result", subtype: "success", is_error: false, result, total_cost_usd: cost });
+const resultSuccess = (
+  result: string,
+  cost: number,
+  usage?: { input_tokens: number; output_tokens: number },
+) =>
+  asMsg({
+    type: "result", subtype: "success", is_error: false, result, total_cost_usd: cost,
+    ...(usage ? { usage } : {}),
+  });
 const resultError = (errors: string[]) =>
   asMsg({ type: "result", subtype: "error_during_execution", is_error: true, errors });
 
@@ -37,12 +44,31 @@ describe("mapStreamMessage", () => {
 });
 
 describe("interpretResult", () => {
-  it("returns ok with summary + cost on success", () => {
-    expect(interpretResult(resultSuccess("created a.ts", 0.012))).toEqual({
+  it("returns ok with summary + cost + token usage on success", () => {
+    expect(
+      interpretResult(resultSuccess("created a.ts", 0.012, { input_tokens: 1200, output_tokens: 340 })),
+    ).toEqual({
       ok: true,
       summary: "created a.ts",
       costUsd: 0.012,
+      tokensIn: 1200,
+      tokensOut: 340,
     });
+  });
+
+  it("defaults token usage to 0 when the result has no usage", () => {
+    expect(interpretResult(resultSuccess("x", 0.01))).toMatchObject({ tokensIn: 0, tokensOut: 0 });
+  });
+
+  it("folds cache-read + cache-creation tokens into tokensIn (no under-count on cached runs)", () => {
+    const cached = asMsg({
+      type: "result", subtype: "success", is_error: false, result: "ok", total_cost_usd: 0.01,
+      usage: {
+        input_tokens: 200, output_tokens: 50,
+        cache_read_input_tokens: 4000, cache_creation_input_tokens: 800,
+      },
+    });
+    expect(interpretResult(cached)).toMatchObject({ tokensIn: 5000, tokensOut: 50 });
   });
 
   it("returns not-ok with joined errors on error subtype", () => {
