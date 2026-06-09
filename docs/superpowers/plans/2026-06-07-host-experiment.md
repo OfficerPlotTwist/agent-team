@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** `@agent-team/host-experiment` — run K agent variants on one task in a single parallel run, capture clean per-variant metrics (cost/turns/status/diff-shape + advisory wall-clock), and write a ranked report; all branches kept, nothing auto-merged.
+**Goal:** `@agent-team/host-experiment` — run K agent variants on one task in a single parallel run, capture clean per-variant metrics (cost/turns/status/diff-shape + advisory wall-clock), write a ranked report, and auto-promote the winning variant to a `agentteam/winner-<task>` branch (non-destructive); all variant branches kept + per-variant diff artifacts written.
 
 **Architecture:** Graph-expansion (Approach A): one task + K variants → K dependency-free sibling `TaskNode`s the existing 1:1:1 `Scheduler` runs concurrently. Validity comes from reusing core `AmbientIntegration` (every variant forks from one frozen base, none merge) and from never wiring the S5 memory recorder. Per-variant cost from `CostLedger.perAgent()`; wall-clock from bus `event.ts`. New leaf host package; **zero core/adapter change**.
 
@@ -34,15 +34,17 @@ packages/host-experiment/
   src/
     variant.ts            # Variant type, variantNodeId, assertGitSafe (pure)
     expand.ts             # expandTask -> { graph, variantByNodeId, baseRole } (pure)
-    report.ts             # renderReport(metrics, opts) -> { markdown, json } (pure)
+    report.ts             # VariantMetrics + rankVariants + renderReport (winner-marked) (pure)
+    selector.ts           # selectWinner (pure) — tournament pick
     metrics.ts            # MetricsCollector (bus tally + git diff-shape)
     compose.ts            # composeExperiment (Scheduler + AmbientIntegration + per-variant adapterFor)
     cli-args.ts           # parseArgs (pure)
-    cli.ts                # agent-team-experiment entry
+    cli.ts                # agent-team-experiment entry: run -> collect -> diffs -> promote winner -> report
   tests/
     variant.test.ts
     expand.test.ts
     report.test.ts
+    selector.test.ts
     metrics.test.ts
     compose-experiment.test.ts
     cli-args.test.ts
@@ -398,11 +400,19 @@ describe("renderReport", () => {
     expect(markdown).toContain("agentteam/coder-t__cheap"); // branches listed
   });
 
+  it("marks the top-ranked completed variant as the winner", () => {
+    const { markdown, json } = renderReport(rows, { taskGoal: "g", modelId: "claude-opus-4-8" });
+    expect(markdown).toMatch(/\*\*Winner:\*\* ⭐ cheap/); // cheap: completed + cheapest
+    expect(markdown).toMatch(/\| cheap ⭐ \|/); // winner row marked
+    expect((JSON.parse(json) as { winner: string }).winner).toBe("cheap");
+  });
+
   it("emits parseable JSON with all rows", () => {
     const { json } = renderReport(rows, { taskGoal: "g", modelId: "claude-opus-4-8" });
-    const parsed = JSON.parse(json) as { variants: VariantMetrics[] };
+    const parsed = JSON.parse(json) as { variants: VariantMetrics[]; winner: string | null };
     expect(parsed.variants).toHaveLength(3);
     expect(parsed.variants.some((v) => v.variant === "broken" && v.status === "failed")).toBe(true);
+    expect(parsed.winner).toBe("cheap");
   });
 });
 ```
@@ -445,32 +455,46 @@ function rank(a: VariantMetrics, b: VariantMetrics): number {
   return a.turns - b.turns;
 }
 
+/** The stable comparison ordering (exported so selector.ts shares one ranking). */
+export function rankVariants(metrics: VariantMetrics[]): VariantMetrics[] {
+  return [...metrics].sort(rank);
+}
+
 export function renderReport(
   metrics: VariantMetrics[],
   opts: ReportOptions,
 ): { markdown: string; json: string } {
-  const ranked = [...metrics].sort(rank);
+  const ranked = rankVariants(metrics);
+  const winner = ranked.find((m) => m.status === "completed") ?? null;
 
   const header =
     "| variant | status | cost ($) | turns | wall ms (advisory) | files | +/− | commits |\n" +
     "|---|---|---|---|---|---|---|---|";
   const rows = ranked.map(
     (m) =>
-      `| ${m.variant} | ${m.status}${m.error ? ` (${m.error})` : ""} | ${m.costUsd.toFixed(4)} | ` +
-      `${m.turns} | ${m.wallMs} | ${m.filesChanged} | +${m.insertions}/−${m.deletions} | ${m.commits} |`,
+      `| ${m.variant}${m === winner ? " ⭐" : ""} | ${m.status}${m.error ? ` (${m.error})` : ""} | ` +
+      `${m.costUsd.toFixed(4)} | ${m.turns} | ${m.wallMs} | ${m.filesChanged} | ` +
+      `+${m.insertions}/−${m.deletions} | ${m.commits} |`,
   );
-  const branches = ranked.map((m) => `- \`${m.branch}\` (${m.variant}) — kept, unmerged`);
+  const branches = ranked.map(
+    (m) => `- \`${m.branch}\` (${m.variant})${m === winner ? " — ⭐ winner, promoted" : " — kept, unmerged"}`,
+  );
 
   const markdown =
     `# Experiment report\n\n` +
     `**Task:** ${opts.taskGoal}\n\n` +
+    `**Winner:** ${winner ? `⭐ ${winner.variant}` : "(none — every variant failed)"}\n\n` +
     `${header}\n${rows.join("\n")}\n\n` +
     `> wall ms is **advisory** — variants ran in parallel and contend for CPU + the API rate limit; ` +
     `cost / turns / status / diff are the clean comparators.\n\n` +
-    `## Staged branches (inspect / adopt manually)\n\n${branches.join("\n")}\n\n` +
+    `## Branches\n\n${branches.join("\n")}\n\n` +
     `———\nGenerated by ${opts.modelId} · task completed\n`;
 
-  const json = JSON.stringify({ task: opts.taskGoal, variants: ranked }, null, 2);
+  const json = JSON.stringify(
+    { task: opts.taskGoal, winner: winner?.variant ?? null, variants: ranked },
+    null,
+    2,
+  );
   return { markdown, json };
 }
 ```
@@ -478,13 +502,93 @@ export function renderReport(
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `npm run test -w @agent-team/host-experiment -- tests/report.test.ts`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add packages/host-experiment/src/report.ts packages/host-experiment/tests/report.test.ts
-git commit -m "feat(host-experiment): VariantMetrics + ranked report (md+json, TDD)"
+git commit -m "feat(host-experiment): VariantMetrics + ranked report w/ winner mark (md+json, TDD)"
+```
+
+---
+
+### Task 4b: Selector (selectWinner)
+
+**Files:**
+- Create: `packages/host-experiment/src/selector.ts`
+- Test: `packages/host-experiment/tests/selector.test.ts`
+
+- [ ] **Step 1: Write the failing test** — `packages/host-experiment/tests/selector.test.ts`:
+
+```ts
+import { describe, it, expect } from "vitest";
+import { selectWinner } from "../src/selector.js";
+import type { VariantMetrics } from "../src/report.js";
+
+const m = (over: Partial<VariantMetrics>): VariantMetrics => ({
+  variant: "v", nodeId: "t__v", status: "completed", costUsd: 0.01, turns: 1,
+  wallMs: 0, filesChanged: 0, insertions: 0, deletions: 0, commits: 0,
+  branch: "agentteam/coder-t__v", ...over,
+});
+
+describe("selectWinner", () => {
+  it("picks the cheapest completed variant", () => {
+    const w = selectWinner([
+      m({ variant: "a", costUsd: 0.05 }),
+      m({ variant: "b", costUsd: 0.01 }),
+      m({ variant: "c", costUsd: 0.03 }),
+    ]);
+    expect(w?.variant).toBe("b");
+  });
+
+  it("never picks a failed variant, even if it would rank first on cost", () => {
+    const w = selectWinner([
+      m({ variant: "broke", status: "failed", costUsd: 0.0, error: "boom" }),
+      m({ variant: "ok", status: "completed", costUsd: 0.02 }),
+    ]);
+    expect(w?.variant).toBe("ok");
+  });
+
+  it("returns null when every variant failed", () => {
+    expect(
+      selectWinner([m({ status: "failed", error: "x" }), m({ status: "failed", error: "y" })]),
+    ).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `npm run test -w @agent-team/host-experiment -- tests/selector.test.ts`
+Expected: FAIL — `Cannot find module '../src/selector.js'`.
+
+- [ ] **Step 3: Create `packages/host-experiment/src/selector.ts`**
+
+```ts
+import type { VariantMetrics } from "./report.js";
+import { rankVariants } from "./report.js";
+
+/**
+ * The tournament winner: the top-ranked COMPLETED variant (rankVariants already
+ * orders completed-before-failed, then by cost, then turns). null if all failed.
+ * Pure — the CLI performs the side effect (promote the winner's branch).
+ */
+export function selectWinner(metrics: VariantMetrics[]): VariantMetrics | null {
+  return rankVariants(metrics).find((m) => m.status === "completed") ?? null;
+}
+```
+
+- [ ] **Step 4: Run to verify it passes**
+
+Run: `npm run test -w @agent-team/host-experiment -- tests/selector.test.ts`
+Expected: PASS (3 tests).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/host-experiment/src/selector.ts packages/host-experiment/tests/selector.test.ts
+git commit -m "feat(host-experiment): selectWinner tournament pick (TDD)"
 ```
 
 ---
@@ -1042,6 +1146,7 @@ Expected: PASS (3 tests).
 ```ts
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { stdout } from "node:process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Role } from "@agent-team/core";
@@ -1053,10 +1158,12 @@ import { expandTask } from "./expand.js";
 import { composeExperiment } from "./compose.js";
 import { MetricsCollector } from "./metrics.js";
 import { renderReport } from "./report.js";
+import { selectWinner } from "./selector.js";
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const variants = JSON.parse(readFileSync(args.variants, "utf8")) as Variant[];
+  const git = new NodeGitRunner();
 
   const experiment = expandTask(
     { taskId: args.taskId, role: args.role as Role, goal: args.task },
@@ -1069,12 +1176,13 @@ async function main(): Promise<void> {
     query: query as unknown as QueryFn,
     defaultMaxTurns: args.maxTurns,
     defaultPermTimeoutMs: 60_000,
+    git,
   });
 
   const collector = new MetricsCollector({
     bus: host.bus,
     ledger: host.ledger,
-    git: new NodeGitRunner(),
+    git,
     repoRoot: args.repo,
     base: host.base,
     variantByNodeId: experiment.variantByNodeId,
@@ -1083,17 +1191,33 @@ async function main(): Promise<void> {
 
   stdout.write(`experiment: ${variants.length} variants on "${args.task}" (base ${host.base.slice(0, 7)})\n`);
   const result = await host.run();
-
   const rows = await collector.collect();
+
+  // Per-variant full diff artifacts (side-by-side comparison).
+  const reportDir = dirname(args.report);
+  for (const r of rows) {
+    const diff = (await git.run(["diff", `${host.base}..${r.branch}`], args.repo)).stdout;
+    writeFileSync(join(reportDir, `${r.variant}.diff`), diff);
+  }
+
+  // Tournament: promote the winner to a stable branch (fast-forward from the frozen base).
+  const winner = selectWinner(rows);
+  let promoted = "(none — every variant failed)";
+  if (winner) {
+    const winnerBranch = `agentteam/winner-${args.taskId}`;
+    await git.run(["branch", "-f", winnerBranch, winner.branch], args.repo);
+    promoted = `${winner.variant} → ${winnerBranch}`;
+  }
+
   const { markdown, json } = renderReport(rows, { taskGoal: args.task, modelId: args.model });
   writeFileSync(args.report, markdown);
   writeFileSync(args.report.replace(/\.md$/, ".json"), json);
 
-  stdout.write(`\nrun: ${result.status}\n`);
+  stdout.write(`\nrun: ${result.status}\nwinner: ${promoted}\n`);
   for (const r of [...rows].sort((a, b) => a.costUsd - b.costUsd)) {
     stdout.write(`  ${r.variant}: ${r.status} · $${r.costUsd.toFixed(4)} · ${r.turns} turns · ${r.branch}\n`);
   }
-  stdout.write(`report → ${args.report}\n`);
+  stdout.write(`report → ${args.report} · diffs → ${reportDir}/<variant>.diff\n`);
 }
 
 main().catch((err) => {
@@ -1136,11 +1260,13 @@ a THROWAWAY git repo with at least one commit (not OS-sandboxed — B1 caveat).
 3. Run:
    `node packages/host-experiment/dist/cli.js --task "create fizzbuzz.py printing 1..20" --task-id fizz --variants variants.json --repo /tmp/hx --report /tmp/hx/report.md`
 4. VERIFY:
-   - [ ] both variants run; the printed table shows per-variant cost / turns / status / branch
+   - [ ] both variants run; the printed table shows per-variant cost / turns / status / branch, and a `winner:` line
    - [ ] `git -C /tmp/hx branch` lists `agentteam/coder-fizz__haiku` and `...__sonnet`, BOTH unmerged
+   - [ ] the winner is promoted: `agentteam/winner-fizz` exists and points at the winning variant's branch
    - [ ] `main` is unchanged (`git -C /tmp/hx rev-parse main` == the base from step 1); NO `agentteam/integration` branch exists
    - [ ] `git -C /tmp/hx show agentteam/coder-fizz__haiku:fizzbuzz.py` shows that variant's output
-   - [ ] `/tmp/hx/report.md` (+ `.json`) written, ranked, wall-clock labeled advisory, footer present
+   - [ ] `/tmp/hx/report.md` (+ `.json`) written, ranked, **Winner** marked, wall-clock labeled advisory, footer present
+   - [ ] per-variant diff artifacts written: `/tmp/hx/haiku.diff` and `/tmp/hx/sonnet.diff` exist and differ
 5. Validity: confirm the two variants produced INDEPENDENT solutions (neither references the other) —
    they forked from the same frozen base and never saw each other's branch.
 ```
@@ -1151,7 +1277,7 @@ Run: `npm run build`
 Expected: exit 0 across all seven packages.
 
 Run: `npm run test`
-Expected: ALL suites green; total > 220 (host-experiment adds ~14: variant 3, expand 5, report 3, metrics 1, compose 1, cli-args 3 ≈ 16).
+Expected: ALL suites green; total > 220 (host-experiment adds: variant 3, expand 5, report 4, selector 3, metrics 1, compose 1, cli-args 3 ≈ 20).
 
 - [ ] **Step 3: Zero-diff-outside check**
 
