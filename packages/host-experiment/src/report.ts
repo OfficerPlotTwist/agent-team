@@ -1,8 +1,14 @@
 export interface VariantMetrics {
   variant: string;
   nodeId: string;
+  /** The model this variant ran (from Variant.model). */
+  model: string;
   status: "completed" | "failed";
   costUsd: number;
+  /** Tokens spent (from the SDK result usage; 0 if the backend reported none).
+   *  tokensIn = total input processed (fresh + cache-read + cache-creation). */
+  tokensIn: number;
+  tokensOut: number;
   turns: number;
   /** first-event -> done, from bus event.ts. ADVISORY (concurrency-contaminated). */
   wallMs: number;
@@ -41,13 +47,13 @@ export function renderReport(
   const winner = ranked.find((m) => m.status === "completed") ?? null;
 
   const header =
-    "| variant | status | cost ($) | turns | wall ms (advisory) | files | +/− | commits |\n" +
-    "|---|---|---|---|---|---|---|---|";
+    "| variant | model | status | cost ($) | tokens (in/out) | turns | wall ms (advisory) | files | +/− | commits |\n" +
+    "|---|---|---|---|---|---|---|---|---|---|";
   const rows = ranked.map(
     (m) =>
-      `| ${m.variant}${m === winner ? " ⭐" : ""} | ${m.status}${m.error ? ` (${m.error})` : ""} | ` +
-      `${m.costUsd.toFixed(4)} | ${m.turns} | ${m.wallMs} | ${m.filesChanged} | ` +
-      `+${m.insertions}/−${m.deletions} | ${m.commits} |`,
+      `| ${m.variant}${m === winner ? " ⭐" : ""} | ${m.model} | ${m.status}${m.error ? ` (${m.error})` : ""} | ` +
+      `${m.costUsd.toFixed(4)} | ${m.tokensIn + m.tokensOut} (${m.tokensIn}/${m.tokensOut}) | ` +
+      `${m.turns} | ${m.wallMs} | ${m.filesChanged} | +${m.insertions}/−${m.deletions} | ${m.commits} |`,
   );
   const branches = ranked.map(
     (m) => `- \`${m.branch}\` (${m.variant})${m === winner ? " — ⭐ winner, promoted" : " — kept, unmerged"}`,

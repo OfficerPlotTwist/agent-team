@@ -45,6 +45,9 @@ describe("composeExperiment offline integration", () => {
     yield asMsg({
       type: "result", subtype: "success", is_error: false,
       result: `wrote ${files.length}`, total_cost_usd: cheap ? 0.01 : 0.05,
+      usage: cheap
+        ? { input_tokens: 500, output_tokens: 100 }
+        : { input_tokens: 1500, output_tokens: 300 },
     });
   };
 
@@ -82,6 +85,13 @@ describe("composeExperiment offline integration", () => {
     expect(cheap.filesChanged).toBe(1);
     expect(thorough.costUsd).toBeCloseTo(0.05);
     expect(thorough.filesChanged).toBe(2);
+    // model + token usage flow end-to-end through the real ClaudeAdapter
+    expect(cheap.model).toBe("fake-cheap");
+    expect(cheap.tokensIn).toBe(500);
+    expect(cheap.tokensOut).toBe(100);
+    expect(thorough.model).toBe("fake-thorough");
+    expect(thorough.tokensIn).toBe(1500);
+    expect(thorough.tokensOut).toBe(300);
 
     // ISOLATION (spec §10.4): each variant forked from the same frozen base and
     // never saw the other's work. cheap wrote only a.txt; thorough also wrote

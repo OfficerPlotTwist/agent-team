@@ -3,9 +3,9 @@ import { selectWinner } from "../src/selector.js";
 import type { VariantMetrics } from "../src/report.js";
 
 const m = (over: Partial<VariantMetrics>): VariantMetrics => ({
-  variant: "v", nodeId: "t__v", status: "completed", costUsd: 0.01, turns: 1,
-  wallMs: 0, filesChanged: 0, insertions: 0, deletions: 0, commits: 0,
-  branch: "agentteam/coder-t__v", ...over,
+  variant: "v", nodeId: "t__v", model: "m", status: "completed", costUsd: 0.01,
+  tokensIn: 0, tokensOut: 0, turns: 1, wallMs: 0, filesChanged: 0, insertions: 0,
+  deletions: 0, commits: 0, branch: "agentteam/coder-t__v", ...over,
 });
 
 describe("selectWinner", () => {

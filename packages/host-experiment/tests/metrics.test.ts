@@ -40,6 +40,7 @@ describe("MetricsCollector", () => {
     bus.publish({ kind: "message", from: "coder#t__cheap", to: "all", text: "hi" });
     bus.publish({ kind: "done", from: "coder#t__cheap", summary: "ok" });
     ledger.add("coder#t__cheap", 0.01);
+    ledger.addUsage("coder#t__cheap", { tokensIn: 1200, tokensOut: 300 });
     // slow: error, no done -> failed
     bus.publish({ kind: "tool_call", from: "coder#t__slow", name: "Bash", args: {} });
     bus.publish({ kind: "error", from: "coder#t__slow", message: "boom" });
@@ -50,7 +51,10 @@ describe("MetricsCollector", () => {
     const slow = rows.find((r) => r.variant === "slow")!;
 
     expect(cheap.status).toBe("completed");
+    expect(cheap.model).toBe("m1");
     expect(cheap.costUsd).toBeCloseTo(0.01);
+    expect(cheap.tokensIn).toBe(1200);
+    expect(cheap.tokensOut).toBe(300);
     expect(cheap.turns).toBe(2);
     expect(cheap.wallMs).toBeGreaterThanOrEqual(0);
     expect(cheap.filesChanged).toBe(1);

@@ -4,19 +4,19 @@ import type { VariantMetrics } from "../src/report.js";
 
 const rows: VariantMetrics[] = [
   {
-    variant: "thorough", nodeId: "t__thorough", status: "completed",
-    costUsd: 0.05, turns: 4, wallMs: 9000, filesChanged: 2, insertions: 40,
-    deletions: 3, commits: 1, branch: "agentteam/coder-t__thorough",
+    variant: "thorough", nodeId: "t__thorough", model: "claude-opus-4-8", status: "completed",
+    costUsd: 0.05, tokensIn: 8000, tokensOut: 1500, turns: 4, wallMs: 9000, filesChanged: 2,
+    insertions: 40, deletions: 3, commits: 1, branch: "agentteam/coder-t__thorough",
   },
   {
-    variant: "cheap", nodeId: "t__cheap", status: "completed",
-    costUsd: 0.01, turns: 2, wallMs: 4000, filesChanged: 1, insertions: 10,
-    deletions: 0, commits: 1, branch: "agentteam/coder-t__cheap",
+    variant: "cheap", nodeId: "t__cheap", model: "claude-haiku-4-5-20251001", status: "completed",
+    costUsd: 0.01, tokensIn: 2000, tokensOut: 300, turns: 2, wallMs: 4000, filesChanged: 1,
+    insertions: 10, deletions: 0, commits: 1, branch: "agentteam/coder-t__cheap",
   },
   {
-    variant: "broken", nodeId: "t__broken", status: "failed",
-    costUsd: 0.0, turns: 1, wallMs: 500, filesChanged: 0, insertions: 0,
-    deletions: 0, commits: 0, branch: "agentteam/coder-t__broken", error: "boom",
+    variant: "broken", nodeId: "t__broken", model: "claude-x", status: "failed",
+    costUsd: 0.0, tokensIn: 100, tokensOut: 0, turns: 1, wallMs: 500, filesChanged: 0,
+    insertions: 0, deletions: 0, commits: 0, branch: "agentteam/coder-t__broken", error: "boom",
   },
 ];
 
@@ -25,6 +25,19 @@ describe("renderReport", () => {
     const { markdown } = renderReport(rows, { taskGoal: "g", modelId: "claude-opus-4-8" });
     const order = [...markdown.matchAll(/\| (cheap|thorough|broken) /g)].map((m) => m[1]);
     expect(order).toEqual(["cheap", "thorough", "broken"]); // cheap < thorough cost; broken failed last
+  });
+
+  it("renders model + total/breakdown token columns per variant", () => {
+    const { markdown, json } = renderReport(rows, { taskGoal: "g", modelId: "claude-opus-4-8" });
+    expect(markdown).toContain("| model |"); // header column
+    expect(markdown).toContain("tokens (in/out)"); // header column
+    expect(markdown).toContain("claude-haiku-4-5-20251001"); // cheap's model
+    expect(markdown).toMatch(/2300 \(2000\/300\)/); // cheap total + breakdown
+    const parsed = JSON.parse(json) as { variants: VariantMetrics[] };
+    const cheap = parsed.variants.find((v) => v.variant === "cheap")!;
+    expect(cheap.model).toBe("claude-haiku-4-5-20251001");
+    expect(cheap.tokensIn).toBe(2000);
+    expect(cheap.tokensOut).toBe(300);
   });
 
   it("annotates wall-clock as advisory and includes the attribution footer", () => {

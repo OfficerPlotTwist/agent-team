@@ -56,18 +56,23 @@ export class MetricsCollector {
   async collect(): Promise<VariantMetrics[]> {
     const { ledger, git, repoRoot, base, variantByNodeId, role } = this.#deps;
     const perAgent = ledger.perAgent();
+    const usage = ledger.usagePerAgent();
     const out: VariantMetrics[] = [];
 
     for (const [nodeId, variant] of variantByNodeId) {
       const agentId = `${role}#${nodeId}`;
       const branch = `agentteam/${role}-${nodeId}`;
       const t = this.#tally.get(nodeId) ?? { firstTs: null, doneTs: null, turns: 0, done: false };
+      const tokens = usage.get(agentId) ?? { tokensIn: 0, tokensOut: 0 };
       const shape = await this.#diffShape(git, repoRoot, base, branch);
       out.push({
         variant: variant.name,
         nodeId,
+        model: variant.model,
         status: t.done ? "completed" : "failed",
         costUsd: perAgent.get(agentId) ?? 0,
+        tokensIn: tokens.tokensIn,
+        tokensOut: tokens.tokensOut,
         turns: t.turns,
         wallMs: t.firstTs !== null && t.doneTs !== null ? t.doneTs - t.firstTs : 0,
         ...shape,
