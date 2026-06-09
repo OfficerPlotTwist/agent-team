@@ -12,7 +12,7 @@ describe("variant ids", () => {
   });
 
   it("assertGitSafe rejects names that break git ref rules", () => {
-    for (const bad of ["has:colon", "has space", "..dots", "tilde~", "caret^", "q?", "star*", ""]) {
+    for (const bad of ["has:colon", "has space", "..dots", "tilde~", "caret^", "q?", "star*", "", "-leading", "--", "_leading"]) {
       expect(() => assertGitSafe(bad), bad).toThrow();
     }
   });

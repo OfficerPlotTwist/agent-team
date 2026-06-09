@@ -20,11 +20,13 @@ export function variantNodeId(taskId: string, variantName: string): string {
   return `${taskId}__${variantName}`;
 }
 
-/** Throw if `name` would produce an invalid git ref component. */
+/** Throw if `name` would produce an invalid git ref component. Requires a
+ *  leading alphanumeric so a name can never start with '-' (which could be
+ *  mis-parsed as a flag) or '_'. */
 export function assertGitSafe(name: string): void {
-  if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name)) {
     throw new Error(
-      `variant/task name "${name}" must match [A-Za-z0-9_-]+ (git ref names forbid ':', spaces, '..', etc.)`,
+      `variant/task name "${name}" must match [A-Za-z0-9][A-Za-z0-9_-]* (git ref names forbid ':', spaces, '..', leading '-', etc.)`,
     );
   }
 }
