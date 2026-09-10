@@ -5,8 +5,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @agent-team/core && npm run build -w @agent-team/adapters-claude && npm run build -w @agent-team/adapters-deepseek && npm run build -w @agent-team/host-headless && npm run build -w @agent-team/host-vscode && npm run build -w @agent-team/host-web && npm run build -w @agent-team/host-experiment",
-    "test": "npm run test -w @agent-team/core && npm run test -w @agent-team/adapters-claude && npm run test -w @agent-team/adapters-deepseek && npm run test -w @agent-team/host-headless && npm run test -w @agent-team/host-vscode && npm run test -w @agent-team/host-web && npm run test -w @agent-team/host-experiment",
+    "build": "npm run build -w @agent-team/core && npm run build -w @agent-team/adapters-claude && npm run build -w @agent-team/adapters-deepseek && npm run build -w @agent-team/adapters-codewhale && npm run build -w @agent-team/host-headless && npm run build -w @agent-team/host-vscode && npm run build -w @agent-team/host-web && npm run build -w @agent-team/host-experiment",
+    "test": "npm run test -w @agent-team/core && npm run test -w @agent-team/adapters-claude && npm run test -w @agent-team/adapters-deepseek && npm run test -w @agent-team/adapters-codewhale && npm run test -w @agent-team/host-headless && npm run test -w @agent-team/host-vscode && npm run test -w @agent-team/host-web && npm run test -w @agent-team/host-experiment",
     "build:core": "npm run build -w @agent-team/core"
   }
 }
